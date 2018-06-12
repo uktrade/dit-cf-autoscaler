@@ -1,0 +1,8 @@
+prometheus_client
+psycopg2
+psycopg2-binary
+aiohttp
+aiopg
+cloudfoundry_client
+python-dotenv
+-e git+http://github.com/amitsaha/aiohttp-prometheus.git#egg=aiohttp_prometheus

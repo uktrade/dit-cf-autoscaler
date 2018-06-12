@@ -1,0 +1,13 @@
+# HELP cpu
+# TYPE cpu gauge
+cpu{app="__conduit_46575__",cell_id="2e4c45eb-7d39-422d-bd7a-2cafe565dfeb",guid="ec721f8d-fb26-4b99-983c-0f03852273f8",instance="0",job="diego-cell",organisation="dit-services",space="exopps"} 0
+cpu{app="__conduit_46575__",cell_id="a752e8c9-9707-48ab-9338-5aed5bcdaf55",guid="ec721f8d-fb26-4b99-983c-0f03852273f8",instance="0",job="diego-cell",organisation="dit-services",space="exopps"} 0
+cpu{app="__conduit_47178__",cell_id="c406fcb1-3582-4ff5-aecf-324c43599840",guid="71268dbe-66b4-4c9c-a3dd-3d22b17a235a",instance="0",job="diego-cell",organisation="dit-services",space="exopps"} 0
+cpu{app="activity-stream",cell_id="7a161029-2ed5-423b-be8c-4a09cfd1a27d",guid="26b5090b-11df-4a06-b69d-eec55313827a",instance="0",job="diego-cell",organisation="dit-services",space="activity-stream"} 0
+cpu{app="activity-stream",cell_id="fe16bd16-a76b-4600-ba76-34e1325ed2bb",guid="26b5090b-11df-4a06-b69d-eec55313827a",instance="0",job="diego-cell",organisation="dit-services",space="activity-stream"} 0
+cpu{app="cert-monitor-production",cell_id="5ecc47ba-c589-422e-8fdf-d2550e7ec99f",guid="3321b00c-7aa7-47e3-b86a-15d7af53d36d",instance="0",job="diego-cell",organisation="dit-services",space="webops"} 0
+cpu{app="cert-monitor-production",cell_id="8ebbfec3-2a77-4730-9690-59563f35d4bb",guid="3321b00c-7aa7-47e3-b86a-15d7af53d36d",instance="0",job="diego-cell",organisation="dit-services",space="webops"} 0
+cpu{app="contact-ukti",cell_id="250c3a85-2832-4968-b5eb-b568c190e63c",guid="11beddd9-0041-4bb3-96d7-d29b8ae1aeb5",instance="0",job="diego-cell",organisation="dit-services",space="exopps"} 0
+cpu{app="contact-ukti",cell_id="c4a44a74-7fe3-435d-9abd-ea92320be576",guid="11beddd9-0041-4bb3-96d7-d29b8ae1aeb5",instance="1",job="diego-cell",organisation="dit-services",space="exopps"} 0
+cpu{app="datahub",cell_id="5d496410-8015-4c53-a018-402146284807",guid="d2842d73-50c0-47f8-8236-2738cc8063a8",instance="0",job="diego-cell",organisation="dit-services",space="datahub"} 0
+cpu{app="datahub",cell_id="98409fbf-ef6c-4ce6-af28-01e62ffda8e6",guid="d2842d73-50c0-47f8-8236-2738cc8063a8",instance="3",job="diego-cell",organisation="dit-services",space="datahub"} 1

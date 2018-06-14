@@ -27,6 +27,12 @@ def app_factory():
     return _make_app
 
 
+async def _clear_database(conn):
+    async with conn.cursor() as cur:
+        await cur.execute('DELETE FROM actions;')
+        await cur.execute('DELETE FROM metrics;')
+
+
 @pytest.fixture
 @async_generator
 async def pool():
@@ -38,6 +44,7 @@ async def pool():
 @async_generator
 async def conn(pool):
     async with pool.acquire() as conn:
+        await _clear_database(conn)
         await yield_(conn)
 
 

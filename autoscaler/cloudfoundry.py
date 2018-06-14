@@ -10,17 +10,3 @@ def get_client(username, password):
     client.init_with_user_credentials(username, password)
 
     return client
-
-
-def get_app(space, app, client):
-    """Return a cloudfoundry client"""
-    # TODO: improve exceptions
-    for current_space in client.spaces:
-        if current_space['entity']['name'] == space:
-            for current_app in current_space.apps():
-                if current_app['entity']['name'] == app:
-                    return current_app
-            else:
-                raise Exception('App not found')
-    else:
-        raise Exception('Space not found')

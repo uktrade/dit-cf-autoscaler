@@ -19,26 +19,26 @@ class InsufficientData(Exception):
     pass
 
 
-TRUTHY_VALUES = ['on', 'yes', 'true', 'True', '1', True]
+TRUTHY_VALUES = ['on', 'yes', 'true', 'True', '1']
 
 DEBUG = os.getenv('DEBUG', False) in TRUTHY_VALUES
 
 PROM_PAAS_EXPORTER_URL = os.getenv('PROM_PAAS_EXPORTER_URL')
 PROM_PAAS_EXPORTER_USERNAME = os.getenv('PROM_PAAS_EXPORTER_USERNAME')
 PROM_PAAS_EXPORTER_PASSWORD = os.getenv('PROM_PAAS_EXPORTER_PASSWORD')
-SCRAPE_INTERVAL = int(os.getenv('SCRAPE_INTERVAL', 5))
-APP_CHECK_INTERVAL = int(os.getenv('SCRAPE_INTERVAL', 30))
+SCRAPE_INTERVAL_SECONDS = int(os.getenv('SCRAPE_INTERVAL_SECONDS', 5))
+APP_CHECK_INTERVAL_SECONDS = int(os.getenv('APP_CHECK_INTERVAL_SECONDS', 30))
 POSTGRES_DSN = os.getenv('POSTGRES_DSN')
 CF_USERNAME = os.getenv('CF_USERNAME')
 CF_PASSWORD = os.getenv('CF_PASSWORD')
 SLACK_URL = os.getenv('SLACK_URL')
-DEFAULT_HIGH_THRESHOLD = int(os.getenv('DEFAULT_HIGH_THRESHOLD', 90))
-DEFAULT_LOW_THRESHOLD = int(os.getenv('DEFAULT_LOW_THRESHOLD', 10))
-DEFAULT_THRESHOLD_PERIOD = int(os.getenv('DEFAULT_LOW_THRESHOLD', 5))
+DEFAULT_HIGH_THRESHOLD_CPU_PERCENTAGE = int(os.getenv('DEFAULT_HIGH_THRESHOLD_CPU_PERCENTAGE', 50))
+DEFAULT_LOW_THRESHOLD_CPU_PERCENTAGE = int(os.getenv('DEFAULT_LOW_THRESHOLD_CPU_PERCENTAGE', 10))
+DEFAULT_THRESHOLD_PERIOD_MINUTES = int(os.getenv('DEFAULT_THRESHOLD_PERIOD_MINUTES', 5))
 DEFAULT_MINIMUM_INSTANCES = int(os.getenv('DEFAULT_MINIMUM_INSTANCES', 2))
 DEFAULT_MAXIMUM_INSTANCES = int(os.getenv('DEFAULT_MAXIMUM_INSTANCES', 10))
-DEFAULT_COOLDOWN_PERIOD = int(os.getenv('DEFAULT_COOLDOWN_PERIOD', 5))
-ENABLE_VERBOSE_OUTPUT = os.getenv('ENABLE_VERBOSE_OUTPUT', False) in TRUTHY_VALUES
+DEFAULT_COOLDOWN_PERIOD_MINUTES = int(os.getenv('DEFAULT_COOLDOWN_PERIOD_MINUTES', 5))
+ENABLE_VERBOSE_OUTPUT = os.getenv('ENABLE_VERBOSE_OUTPUT', 'False') in TRUTHY_VALUES
 
 
 dictConfig({
@@ -89,10 +89,12 @@ def get_cpu_metrics(prom_exporter_text):
 
 def get_enabled_apps(cf_client):
     """Scan all CF apps and return a list of enabled apps"""
+
     enabled_apps = []
     kwargs = {'results-per-page': 15}
     for app in cf_client.apps.list(**kwargs):
-        status = app['entity']['environment_json'].get('AUTOSCALING', False)
+        app_conf = app['entity']['environment_json'] or {}
+        status = app_conf.get('AUTOSCALING', 'False')
 
         if status in TRUTHY_VALUES or status == 'test':
             enabled_apps.append(app)
@@ -103,10 +105,10 @@ def get_enabled_apps(cf_client):
 def get_autoscaling_params(cf_app):
     """Determine the autoscaling parameters for an individual app"""
 
-    app_conf = cf_app['entity']['environment_json']
+    app_conf = cf_app['entity']['environment_json'] or {}
 
-    enabled = app_conf.get('AUTOSCALING', False) in TRUTHY_VALUES + ['test']
-    test = app_conf.get('AUTOSCALING', False) == 'test'
+    enabled = app_conf.get('AUTOSCALING', 'False') in TRUTHY_VALUES + ['test']
+    test = app_conf.get('AUTOSCALING', 'False') == 'test'
 
     return {
         'enabled': enabled,
@@ -114,10 +116,10 @@ def get_autoscaling_params(cf_app):
         'min_instances': int(app_conf.get('AUTOSCALING_MIN', DEFAULT_MINIMUM_INSTANCES)),
         'max_instances': int(app_conf.get('AUTOSCALING_MAX', DEFAULT_MAXIMUM_INSTANCES)),
         'instances': int(cf_app['entity']['instances']),
-        'threshold_period': DEFAULT_THRESHOLD_PERIOD,
-        'high_threshold': DEFAULT_LOW_THRESHOLD,
-        'low_threshold': DEFAULT_LOW_THRESHOLD,
-        'cooldown': DEFAULT_COOLDOWN_PERIOD,
+        'threshold_period': DEFAULT_THRESHOLD_PERIOD_MINUTES,
+        'high_threshold': DEFAULT_LOW_THRESHOLD_CPU_PERCENTAGE,
+        'low_threshold': DEFAULT_HIGH_THRESHOLD_CPU_PERCENTAGE,
+        'cooldown': DEFAULT_COOLDOWN_PERIOD_MINUTES,
     }
 
 
@@ -153,10 +155,10 @@ async def slack_notify(app_name, message):
 async def is_cooldown(app_name, space_name, cooldown, conn):
     """Returns `True` if the current time is within the cooldown period"""
     stmt = "SELECT COUNT(*) FROM actions WHERE app=%s and space=%s" \
-           "AND timestamp > now() - INTERVAL '{} min';".format(cooldown)
+           "AND timestamp > now() - INTERVAL '%s min';"
 
     async with conn.cursor() as cur:
-        await cur.execute(stmt, (app_name,space_name,))
+        await cur.execute(stmt, (app_name,space_name,cooldown,))
 
         result = await cur.fetchone()
         return result[0] != 0
@@ -167,7 +169,8 @@ async def scale(app, space_name, instances, conn):
 
     # The API does not provide a public update method, so we're forced to use
     # the private _update method instead.
-    app.client.apps._update(app['metadata']['guid'], dict(instances=instances))
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, app.client.apps._update(app['metadata']['guid'], dict(instances=instances)))
 
     async with conn.cursor() as cur:
         await cur.execute(stmt, (app['entity']['name'], space_name, instances))
@@ -177,20 +180,20 @@ async def get_avg_cpu(app_name, space_name, period, conn):
 
     stmt = "SELECT count(*), avg(value), max(instance) + 1 FROM metrics " \
            "WHERE app=%s AND space=%s AND " \
-           "timestamp BETWEEN now() - INTERVAL '{} min' AND now() " \
-           "GROUP BY app ;".format(period)
+           "timestamp BETWEEN now() - INTERVAL '%s min' AND now() " \
+           "GROUP BY app;"
 
     async with conn.cursor() as cur:
-        await cur.execute(stmt, (app_name, space_name,))
+        await cur.execute(stmt, (app_name, space_name, period,))
 
         if cur.rowcount == 0:
             raise InsufficientData
 
-        datapoints, avg_cpu, instances = await cur.fetchone()
+        datapoints, avg_cpu, instance_count = await cur.fetchone()
 
         # Do we have enough data points spanning the threshold period to make a decision?
         # This will probably need some additional work
-        if datapoints > (period * 60 / SCRAPE_INTERVAL) * instances * 0.7:
+        if datapoints > (period * 60 / SCRAPE_INTERVAL_SECONDS) * instance_count * 0.7:
             return avg_cpu
 
         raise InsufficientData
@@ -230,14 +233,14 @@ async def check_app_autoscaling_state(conn):
         space_name = space['entity']['name']
         params = get_autoscaling_params(app)
 
+        if await is_cooldown(app_name, space_name, params['cooldown'], conn):
+            await notify(app_name, 'is in cool down period', is_verbose=True)
+            continue
+
         try:
             average_cpu = await get_avg_cpu(app_name, space_name, params['threshold_period'], conn)
         except InsufficientData:
             await notify(app_name, 'insufficient data', is_verbose=True)
-            continue
-
-        if await is_cooldown(app_name, space_name, params['cooldown'], conn):
-            await notify(app_name, 'is in cool down period', is_verbose=True)
             continue
 
         if params['low_threshold'] < average_cpu < params['high_threshold']:
@@ -271,7 +274,7 @@ async def periodic_check_apps(pool):
         async with pool.acquire() as conn:
             logger.info('checking app autoscaling status')
             await check_app_autoscaling_state(conn)
-        await asyncio.sleep(APP_CHECK_INTERVAL)
+        await asyncio.sleep(APP_CHECK_INTERVAL_SECONDS)
 
 
 async def periodic_get_metrics(pool):
@@ -281,7 +284,7 @@ async def periodic_get_metrics(pool):
         async with pool.acquire() as conn:
             logger.info('retrieving metrics')
             await get_metrics(conn)
-        await asyncio.sleep(SCRAPE_INTERVAL)
+        await asyncio.sleep(SCRAPE_INTERVAL_SECONDS)
 
 
 async def periodic_remove_old_data(pool):
@@ -296,7 +299,7 @@ async def periodic_remove_old_data(pool):
 async def main():
     loop = asyncio.get_event_loop()
 
-    await notify('general', 'autoscaler started')
+    await notify('general', 'autoscaler started', is_verbose=True)
 
     async with aiopg.create_pool(POSTGRES_DSN) as pool:
         await asyncio.gather(
@@ -305,8 +308,16 @@ async def main():
             loop.create_task(periodic_remove_old_data(pool)))
 
 
+def custom_exception_handler(loop, context):
+    loop.default_exception_handler(context)
+
+    print(context)
+    loop.stop()
+
+
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     loop.set_debug(DEBUG)
+    loop.set_exception_handler(custom_exception_handler)
     loop.create_task(main())
     loop.run_forever()

@@ -45,10 +45,10 @@ def test_test_get_autoscaling_params(app_factory):
 
 
 @pytest.mark.asyncio
-async def test_is_cooldown_true(conn, create_action):
-    await create_action(dt.datetime.now() - dt.timedelta(minute=-6), 'test_app', 'test_space', 1)
+async def test_is_cooldown_false(conn, create_action):
+    await create_action(dt.datetime.now() - dt.timedelta(minute=6), 'test_app', 'test_space', 1)
 
-    assert await is_cooldown('test_app', 'test_space', 5, conn)
+    assert not await is_cooldown('test_app', 'test_space', 5, conn)
 
 
 @pytest.mark.asyncio
@@ -70,4 +70,3 @@ def test_get_cpu_metrics(prom_exporter_text):
         ('cpu', 'datahub', 0, 'datahub', 0.0), ('cpu', 'datahub', 3, 'datahub', 1.0)]
 
     assert results == expected
-

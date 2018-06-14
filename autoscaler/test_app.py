@@ -6,18 +6,16 @@ import autoscaler.app as autoscaler
 
 
 @pytest.mark.parametrize("test_input,expected", [
-    ({'AUTOSCALING': 'on'}, {'enabled': True, 'test': False}),
-    ({'AUTOSCALING': 'off'}, {'enabled': False, 'test': False}),
-    ({'AUTOSCALING': 'test'}, {'enabled': True, 'test': True}),
-    ({}, {'enabled': False, 'test': False}),
+    ({'AUTOSCALING': 'on'}, True),
+    ({'AUTOSCALING': 'off'}, False),
+    ({}, False),
 ])
 def test_get_autoscaling_params_autoscaling(app_factory, test_input, expected):
 
     app = app_factory('my_app', **test_input)
     params = get_autoscaling_params(app)
 
-    assert params['enabled'] == expected['enabled']
-    assert params['test'] == expected['test']
+    assert params['enabled'] == expected
 
 
 @pytest.mark.parametrize("test_input,expected", [
@@ -38,15 +36,15 @@ def test_test_get_autoscaling_params(app_factory):
     app = app_factory('my_app')
     params = get_autoscaling_params(app)
 
-    assert params['threshold_period'] == autoscaler.DEFAULT_THRESHOLD_PERIOD
-    assert params['high_threshold'] == autoscaler.DEFAULT_LOW_THRESHOLD
-    assert params['low_threshold'] == autoscaler.DEFAULT_LOW_THRESHOLD
-    assert params['cooldown'] == autoscaler.DEFAULT_COOLDOWN_PERIOD
+    assert params['threshold_period'] == autoscaler.DEFAULT_THRESHOLD_PERIOD_MINUTES
+    assert params['high_threshold'] == autoscaler.DEFAULT_HIGH_THRESHOLD_CPU_PERCENTAGE
+    assert params['low_threshold'] == autoscaler.DEFAULT_LOW_THRESHOLD_CPU_PERCENTAGE
+    assert params['cooldown'] == autoscaler.DEFAULT_COOLDOWN_PERIOD_MINUTES
 
 
 @pytest.mark.asyncio
 async def test_is_cooldown_false(conn, create_action):
-    await create_action(dt.datetime.now() - dt.timedelta(minute=6), 'test_app', 'test_space', 1)
+    await create_action(dt.datetime.utcnow() - dt.timedelta(minutes=6), 'test_app', 'test_space', 1)
 
     assert not await is_cooldown('test_app', 'test_space', 5, conn)
 

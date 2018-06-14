@@ -96,7 +96,7 @@ def get_enabled_apps(cf_client):
         app_conf = app['entity']['environment_json'] or {}
         status = app_conf.get('AUTOSCALING', 'False')
 
-        if status in TRUTHY_VALUES or status == 'test':
+        if status in TRUTHY_VALUES:
             enabled_apps.append(app)
 
     return enabled_apps
@@ -107,18 +107,16 @@ def get_autoscaling_params(cf_app):
 
     app_conf = cf_app['entity']['environment_json'] or {}
 
-    enabled = app_conf.get('AUTOSCALING', 'False') in TRUTHY_VALUES + ['test']
-    test = app_conf.get('AUTOSCALING', 'False') == 'test'
+    enabled = app_conf.get('AUTOSCALING', 'False') in TRUTHY_VALUES
 
     return {
         'enabled': enabled,
-        'test': test,
         'min_instances': int(app_conf.get('AUTOSCALING_MIN', DEFAULT_MINIMUM_INSTANCES)),
         'max_instances': int(app_conf.get('AUTOSCALING_MAX', DEFAULT_MAXIMUM_INSTANCES)),
         'instances': int(cf_app['entity']['instances']),
         'threshold_period': DEFAULT_THRESHOLD_PERIOD_MINUTES,
-        'high_threshold': DEFAULT_LOW_THRESHOLD_CPU_PERCENTAGE,
-        'low_threshold': DEFAULT_HIGH_THRESHOLD_CPU_PERCENTAGE,
+        'high_threshold': DEFAULT_HIGH_THRESHOLD_CPU_PERCENTAGE,
+        'low_threshold': DEFAULT_LOW_THRESHOLD_CPU_PERCENTAGE,
         'cooldown': DEFAULT_COOLDOWN_PERIOD_MINUTES,
     }
 
@@ -261,8 +259,7 @@ async def check_app_autoscaling_state(conn):
 
             new_instance_count = params['instances'] - 1
 
-        if not params['test']:
-            await scale(app, space_name, new_instance_count, conn)
+        await scale(app, space_name, new_instance_count, conn)
 
         await notify(app_name,
                      f'scaled from {params["instances"]} to {new_instance_count} instances - avg cpu {average_cpu}')

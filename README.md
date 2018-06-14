@@ -1,7 +1,7 @@
 # DIT Cloudfoundry autoscaler
 
 A Cloudfoundry autoscaler that scales applications based on average CPU usage. It currently depends on a prometheus
-exporter to expose the Cloudfoundry app metrics,which is provided by: https://github.com/alphagov/paas-metric-exporter
+exporter to expose the Cloudfoundry app metrics, which is provided by: https://github.com/alphagov/paas-metric-exporter
 
 ## Usage
 

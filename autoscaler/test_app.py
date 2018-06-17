@@ -1,8 +1,15 @@
 import datetime as dt
 import pytest
 
+from autoscaler import app
 from autoscaler.app import get_autoscaling_params, is_cooldown, get_cpu_metrics
 import autoscaler.app as autoscaler
+
+
+async def reset_database(conn):
+    async with conn.cursor() as cur:
+        await cur.execute('DELETE FROM actions;')
+        await cur.execute('DELETE FROM metrics;')
 
 
 @pytest.mark.parametrize("test_input,expected", [
@@ -50,7 +57,8 @@ async def test_is_cooldown_false(conn, create_action):
 
 
 @pytest.mark.asyncio
-async def test_is_cooldown_true(conn, create_action):
+async def test_is_cooldown_false(conn, create_action):
+    await reset_database(conn)
     await create_action(dt.datetime.now(), 'test_app', 'test_space', 1)
 
     assert await is_cooldown('test_app', 'test_space', 5, conn)
@@ -59,12 +67,13 @@ async def test_is_cooldown_true(conn, create_action):
 def test_get_cpu_metrics(prom_exporter_text):
     results = [item for item in get_cpu_metrics(prom_exporter_text)]
 
-    expected = [
-        ('cpu', 'activity-stream', 0, 'activity-stream', 0.0),
-        ('cpu', 'activity-stream', 0, 'activity-stream', 0.0),
-        ('cpu', 'cert-monitor-production', 0, 'webops', 0.0),
-        ('cpu', 'cert-monitor-production', 0, 'webops', 0.0),
-        ('cpu', 'contact-ukti', 0, 'exopps', 0.0), ('cpu', 'contact-ukti', 1, 'exopps', 0.0),
-        ('cpu', 'datahub', 0, 'datahub', 0.0), ('cpu', 'datahub', 3, 'datahub', 1.0)]
+    expected = [{'metric': 'cpu', 'app': 'activity-stream', 'instance': 0, 'space': 'activity-stream', 'value': 0.0},
+     {'metric': 'cpu', 'app': 'activity-stream', 'instance': 0, 'space': 'activity-stream', 'value': 0.0},
+     {'metric': 'cpu', 'app': 'cert-monitor-production', 'instance': 0, 'space': 'webops', 'value': 0.0},
+     {'metric': 'cpu', 'app': 'cert-monitor-production', 'instance': 0, 'space': 'webops', 'value': 0.0},
+     {'metric': 'cpu', 'app': 'contact-ukti', 'instance': 0, 'space': 'exopps', 'value': 0.0},
+     {'metric': 'cpu', 'app': 'contact-ukti', 'instance': 1, 'space': 'exopps', 'value': 0.0},
+     {'metric': 'cpu', 'app': 'datahub', 'instance': 0, 'space': 'datahub', 'value': 0.0},
+     {'metric': 'cpu', 'app': 'datahub', 'instance': 3, 'space': 'datahub', 'value': 1.0}]
 
     assert results == expected

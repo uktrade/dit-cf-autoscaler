@@ -7,8 +7,8 @@ CREATE TABLE metrics (
     metric          VARCHAR(100),
     app             VARCHAR(100),
     space           VARCHAR(100),
-    instance        SMALLINT,
-    value           REAL
+    instance_count  SMALLINT,
+    value       REAL
 );
 
 CREATE TABLE actions (

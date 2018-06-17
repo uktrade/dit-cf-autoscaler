@@ -21,14 +21,14 @@ class InsufficientData(Exception):
 
 TRUTHY_VALUES = ['on', 'yes', 'true', 'True', '1']
 
-DEBUG = os.getenv('DEBUG', False) in TRUTHY_VALUES
+DEBUG = os.getenv('DEBUG', 'False') in TRUTHY_VALUES
 
 PROM_PAAS_EXPORTER_URL = os.getenv('PROM_PAAS_EXPORTER_URL')
 PROM_PAAS_EXPORTER_USERNAME = os.getenv('PROM_PAAS_EXPORTER_USERNAME')
 PROM_PAAS_EXPORTER_PASSWORD = os.getenv('PROM_PAAS_EXPORTER_PASSWORD')
 SCRAPE_INTERVAL_SECONDS = int(os.getenv('SCRAPE_INTERVAL_SECONDS', 5))
 APP_CHECK_INTERVAL_SECONDS = int(os.getenv('APP_CHECK_INTERVAL_SECONDS', 30))
-POSTGRES_DSN = os.getenv('POSTGRES_DSN')
+DATABASE_URL = os.getenv('DATABASE_URL')
 CF_USERNAME = os.getenv('CF_USERNAME')
 CF_PASSWORD = os.getenv('CF_PASSWORD')
 SLACK_URL = os.getenv('SLACK_URL')
@@ -78,13 +78,24 @@ def get_cpu_metrics(prom_exporter_text):
         for sample in family.samples:
             # we're only interested in CPU metrics from web apps
             if sample[0] == 'cpu' and '__conduit' not in sample[1]['app']:
-                yield (
-                    sample[0],                   # metric
-                    sample[1]['app'],            # app
-                    int(sample[1]['instance']),  # instance
-                    sample[1]['space'],          # space
-                    sample[2],                   # value
-                )
+                yield {
+                    'metric': sample[0],
+                    'app': sample[1]['app'],
+                    'instance': int(sample[1]['instance']),
+                    'space': sample[1]['space'],
+                    'value': sample[2],
+                }
+
+
+def group_cpu_metrics(metrics):
+    """
+    Group together each instances metrics per app/space
+    """
+    grouped_metrics = {}
+    for metric in metrics:
+        grouped_metrics.setdefault(metric['space'], {}).setdefault(metric['app'], []).append(metric['value'])
+
+    return [(app, space, metric,) for space, apps in grouped_metrics.items() for app, metric in apps.items()]
 
 
 def get_enabled_apps(cf_client):
@@ -176,7 +187,7 @@ async def scale(app, space_name, instances, conn):
 
 async def get_avg_cpu(app_name, space_name, period, conn):
 
-    stmt = "SELECT count(*), avg(value), max(instance) + 1 FROM metrics " \
+    stmt = "SELECT count(*), avg(value) FROM metrics " \
            "WHERE app=%s AND space=%s AND " \
            "timestamp BETWEEN now() - INTERVAL '%s min' AND now() " \
            "GROUP BY app;"
@@ -187,11 +198,9 @@ async def get_avg_cpu(app_name, space_name, period, conn):
         if cur.rowcount == 0:
             raise InsufficientData
 
-        datapoints, avg_cpu, instance_count = await cur.fetchone()
+        datapoints, avg_cpu = await cur.fetchone()
 
-        # Do we have enough data points spanning the threshold period to make a decision?
-        # This will probably need some additional work
-        if datapoints > (period * 60 / SCRAPE_INTERVAL_SECONDS) * instance_count * 0.7:
+        if datapoints > (period * 60 / SCRAPE_INTERVAL_SECONDS) * 0.7:
             return avg_cpu
 
         raise InsufficientData
@@ -210,14 +219,22 @@ async def get_metrics(conn):
             return await response.text()
 
     async with aiohttp.ClientSession(auth=auth) as session:
-        metrics = await fetch(session, PROM_PAAS_EXPORTER_URL)
+        raw_metrics = await fetch(session, PROM_PAAS_EXPORTER_URL)
 
-    stmt = 'INSERT INTO metrics (timestamp, metric, app, instance, space, value) ' \
+    stmt = 'INSERT INTO metrics (timestamp, metric, space, app, instance_count, value) ' \
            'VALUES(now(), %s, %s, %s, %s, %s);'
 
+    metrics = group_cpu_metrics(get_cpu_metrics(raw_metrics))
+
     async with conn.cursor() as cur:
-        for values in get_cpu_metrics(metrics):
-            await cur.execute(stmt, values)
+        for space, app, metric_values in metrics:
+            await cur.execute(stmt, (
+                'cpu',
+                space,
+                app,
+                len(metric_values),
+                sum(metric_values) / len(metric_values)
+            ))
 
 
 async def check_app_autoscaling_state(conn):
@@ -298,7 +315,7 @@ async def main():
 
     await notify('general', 'autoscaler started', is_verbose=True)
 
-    async with aiopg.create_pool(POSTGRES_DSN) as pool:
+    async with aiopg.create_pool(DATABASE_URL) as pool:
         await asyncio.gather(
             loop.create_task(periodic_get_metrics(pool)),
             loop.create_task(periodic_check_apps(pool)),

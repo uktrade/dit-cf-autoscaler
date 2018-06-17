@@ -7,7 +7,11 @@ import datetime as dt
 
 import asyncio
 import aiohttp
+from aiohttp import web
 import aiopg
+
+from raven import Client
+from raven_aiohttp import AioHttpTransport
 
 from prometheus_client.parser import text_string_to_metric_families
 from .cloudfoundry import get_client
@@ -23,6 +27,7 @@ TRUTHY_VALUES = ['on', 'yes', 'true', 'True', '1']
 
 DEBUG = os.getenv('DEBUG', 'False') in TRUTHY_VALUES
 
+PORT = int(os.getenv('PORT', 8080))
 PROM_PAAS_EXPORTER_URL = os.getenv('PROM_PAAS_EXPORTER_URL')
 PROM_PAAS_EXPORTER_USERNAME = os.getenv('PROM_PAAS_EXPORTER_USERNAME')
 PROM_PAAS_EXPORTER_PASSWORD = os.getenv('PROM_PAAS_EXPORTER_PASSWORD')
@@ -39,6 +44,7 @@ DEFAULT_MINIMUM_INSTANCES = int(os.getenv('DEFAULT_MINIMUM_INSTANCES', 2))
 DEFAULT_MAXIMUM_INSTANCES = int(os.getenv('DEFAULT_MAXIMUM_INSTANCES', 10))
 DEFAULT_COOLDOWN_PERIOD_MINUTES = int(os.getenv('DEFAULT_COOLDOWN_PERIOD_MINUTES', 5))
 ENABLE_VERBOSE_OUTPUT = os.getenv('ENABLE_VERBOSE_OUTPUT', 'False') in TRUTHY_VALUES
+SENTRY_DSN = os.getenv('SENTRY_DSN')
 
 
 dictConfig({
@@ -310,10 +316,23 @@ async def periodic_remove_old_data(pool):
         await asyncio.sleep(300)
 
 
+async def start_webapp(port):
+    app = web.Application()
+    app.add_routes([web.get('/check', lambda _: web.Response(text='OK'))])
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+
+
 async def main():
     loop = asyncio.get_event_loop()
 
-    await notify('general', 'autoscaler started', is_verbose=True)
+    await notify('general', 'starting autoscaler', is_verbose=True)
+
+    logger.info('starting web interface on %s', PORT)
+    await start_webapp(PORT)
 
     async with aiopg.create_pool(DATABASE_URL) as pool:
         await asyncio.gather(
@@ -330,8 +349,12 @@ def custom_exception_handler(loop, context):
 
 
 if __name__ == '__main__':
+    if SENTRY_DSN:
+        sentry_client = Client(SENTRY_DSN, ransport=AioHttpTransport)
+
     loop = asyncio.get_event_loop()
     loop.set_debug(DEBUG)
     loop.set_exception_handler(custom_exception_handler)
     loop.create_task(main())
     loop.run_forever()
+

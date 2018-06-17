@@ -1,7 +1,6 @@
 import datetime as dt
 import pytest
 
-from autoscaler import app
 from autoscaler.app import get_autoscaling_params, is_cooldown, get_cpu_metrics
 import autoscaler.app as autoscaler
 

@@ -2,6 +2,8 @@ prometheus_client
 psycopg2
 psycopg2-binary
 aiohttp
+raven-aiohttp
+raven
 aiopg
 cloudfoundry_client
 python-dotenv

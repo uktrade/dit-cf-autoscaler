@@ -21,6 +21,8 @@ protobuf==2.6.1           # via cloudfoundry-client
 psycopg2-binary==2.7.4
 psycopg2==2.7.4
 python-dotenv==0.8.2
+raven-aiohttp==0.7.0
+raven==6.9.0
 requests==2.18.4          # via oauth2-client
 urllib3==1.22             # via requests
 yarl==1.2.4               # via aiohttp

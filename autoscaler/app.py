@@ -8,6 +8,7 @@ import datetime as dt
 import asyncio
 import aiohttp
 from aiohttp import web
+from aioprometheus import Counter, Gauge, Service, Summary, timer
 import aiopg
 
 from raven import Client
@@ -45,6 +46,16 @@ DEFAULT_MAXIMUM_INSTANCES = int(os.getenv('DEFAULT_MAXIMUM_INSTANCES', 10))
 DEFAULT_COOLDOWN_PERIOD_MINUTES = int(os.getenv('DEFAULT_COOLDOWN_PERIOD_MINUTES', 5))
 ENABLE_VERBOSE_OUTPUT = os.getenv('ENABLE_VERBOSE_OUTPUT', 'False') in TRUTHY_VALUES
 SENTRY_DSN = os.getenv('SENTRY_DSN')
+
+# prometheus metrics:
+PROM_GET_METRICS_TIME = Summary("get_metrics", "the time it takes to get application metrics")
+PROM_AUTOSCALER_CHECK_TIME = Summary("autoscaler_check_time",
+                                     "the time it takes for the autoscaler function to complete")
+PROM_SCALING_ACTIONS = Counter("scaling_actions", "a count of the number of scaling actions that have taken place")
+PROM_AUTOSCALING_ENABLED = Gauge("autoscaling_enabled", "number of apps that have autoscaling enabled")
+PROM_INSUFFICIENT_DATA = Gauge("insufficient_data", "number of apps that have insufficient data")
+PROM_APPS_AT_MIN_SCALE = Gauge("min_scale", "Apps that can't scale down due to being at min instances")
+PROM_APPS_AT_MAX_SCALE = Gauge("max_scale", "Apps that can't scale up due to being at max instances")
 
 
 dictConfig({
@@ -212,6 +223,7 @@ async def get_avg_cpu(app_name, space_name, period, conn):
         raise InsufficientData
 
 
+@timer(PROM_GET_METRICS_TIME)
 async def get_metrics(conn):
     """Get app metrics from the prometheus exporter and store in database"""
 
@@ -243,10 +255,18 @@ async def get_metrics(conn):
             ))
 
 
-async def check_app_autoscaling_state(conn):
+@timer(PROM_AUTOSCALER_CHECK_TIME)
+async def autoscale(conn):
+    """The main autoscaling function"""
     loop = asyncio.get_event_loop()
     client = await loop.run_in_executor(None, get_client, CF_USERNAME, CF_PASSWORD)
     enabled_apps = await loop.run_in_executor(None, get_enabled_apps, client)
+
+    counts = {
+        'at_min_scale': 0,
+        'at_max_scale': 0,
+        'insufficient_data': 0
+    }
 
     for app in enabled_apps:
         app_name = app['entity']['name']
@@ -261,6 +281,7 @@ async def check_app_autoscaling_state(conn):
         try:
             average_cpu = await get_avg_cpu(app_name, space_name, params['threshold_period'], conn)
         except InsufficientData:
+            counts['insufficient_data'] += 1
             await notify(app_name, 'insufficient data', is_verbose=True)
             continue
 
@@ -270,6 +291,7 @@ async def check_app_autoscaling_state(conn):
 
         if average_cpu > params['high_threshold']:
             if params['instances'] >= params['max_instances']:
+                counts['at_max_scale'] += 1
                 await notify(app_name, 'cannot scale up - already at max', is_verbose=True)
                 continue
 
@@ -277,23 +299,31 @@ async def check_app_autoscaling_state(conn):
 
         elif average_cpu < params['low_threshold']:
             if params['instances'] <= params['min_instances']:
+                counts['at_low_scale'] += 1
                 await notify(app_name, 'cannot scale down already at min', is_verbose=True)
                 continue
 
             new_instance_count = params['instances'] - 1
 
         await scale(app, space_name, new_instance_count, conn)
+        PROM_SCALING_ACTIONS.inc()
+
 
         await notify(app_name,
                      f'scaled from {params["instances"]} to {new_instance_count} instances - avg cpu {average_cpu}')
 
+    PROM_INSUFFICIENT_DATA.set({}, counts['insufficient_data'])
+    PROM_APPS_AT_MIN_SCALE.set({}, counts['at_min_scale'])
+    PROM_APPS_AT_MAX_SCALE.set({}, counts['at_max_scale'])
+    PROM_AUTOSCALING_ENABLED.set({}, len(enabled_apps))
 
-async def periodic_check_apps(pool):
+
+async def periodic_run_autoscaler(pool):
     """Periodically scan apps, check autoscaling config and status"""
     while True:
         async with pool.acquire() as conn:
             logger.info('checking app autoscaling status')
-            await check_app_autoscaling_state(conn)
+            await autoscale(conn)
         await asyncio.sleep(APP_CHECK_INTERVAL_SECONDS)
 
 
@@ -317,8 +347,18 @@ async def periodic_remove_old_data(pool):
 
 
 async def start_webapp(port):
+    prometheus_service = Service()
+    prometheus_service.register(PROM_GET_METRICS_TIME)
+    prometheus_service.register(PROM_AUTOSCALER_CHECK_TIME)
+    prometheus_service.register(PROM_AUTOSCALING_ENABLED)
+    prometheus_service.register(PROM_INSUFFICIENT_DATA)
+    prometheus_service.register(PROM_SCALING_ACTIONS)
+    prometheus_service.register(PROM_APPS_AT_MIN_SCALE)
+    prometheus_service.register(PROM_APPS_AT_MAX_SCALE)
+
     app = web.Application()
-    app.add_routes([web.get('/check', lambda _: web.Response(text='OK'))])
+    app.add_routes([web.get('/check', lambda _: web.Response(text='OK')),
+                    web.get('/metrics', prometheus_service.handle_metrics)])
 
     runner = web.AppRunner(app)
     await runner.setup()
@@ -337,7 +377,7 @@ async def main():
     async with aiopg.create_pool(DATABASE_URL) as pool:
         await asyncio.gather(
             loop.create_task(periodic_get_metrics(pool)),
-            loop.create_task(periodic_check_apps(pool)),
+            loop.create_task(periodic_run_autoscaler(pool)),
             loop.create_task(periodic_remove_old_data(pool)))
 
 

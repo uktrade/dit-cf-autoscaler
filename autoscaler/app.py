@@ -210,10 +210,13 @@ async def get_avg_cpu(app_name, space_name, period, conn):
            "timestamp BETWEEN now() - INTERVAL '%s min' AND now() " \
            "GROUP BY app;"
 
+    logger.debug(stmt, app_name, space_name, period)
+
     async with conn.cursor() as cur:
         await cur.execute(stmt, (app_name, space_name, period,))
 
         if cur.rowcount == 0:
+            logger.debug('no row count')
             raise InsufficientData
 
         datapoints, avg_cpu = await cur.fetchone()
@@ -249,8 +252,8 @@ async def get_metrics(conn):
         for space, app, metric_values in metrics:
             await cur.execute(stmt, (
                 'cpu',
-                space,
                 app,
+                space,
                 len(metric_values),
                 sum(metric_values) / len(metric_values)
             ))
@@ -302,7 +305,7 @@ async def autoscale(conn):
 
         elif average_cpu < params['low_threshold']:
             if params['instances'] <= params['min_instances']:
-                counts['at_low_scale'] += 1
+                counts['at_min_scale'] += 1
                 await notify(app_name, 'cannot scale down - already at min', is_verbose=True)
             else:
                 new_instance_count = params['instances'] - 1

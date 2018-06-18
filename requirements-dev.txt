@@ -16,19 +16,23 @@ attrs==18.1.0
 certifi==2018.4.16
 chardet==3.0.4
 cloudfoundry-client==0.0.22
+flake8==3.5.0
 freezegun==0.3.10
 idna-ssl==1.0.1
 idna==2.6
+mccabe==0.6.1             # via flake8
 more-itertools==4.2.0     # via pytest
 multidict==4.3.1
 oauth2-client==0.0.21
 pluggy==0.6.0             # via pytest
 prometheus-client==0.2.0
 prometheus-metrics-proto==18.1.1
-protobuf==2.6.1
+protobuf==3.6.0
 psycopg2-binary==2.7.4
 psycopg2==2.7.4
 py==1.5.3                 # via pytest
+pycodestyle==2.3.1        # via flake8
+pyflakes==1.6.0           # via flake8
 pytest-asyncio==0.8.0
 pytest-env==0.6.2
 pytest==3.6.1

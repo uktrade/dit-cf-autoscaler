@@ -20,7 +20,7 @@ multidict==4.3.1          # via aiohttp, yarl
 oauth2-client==0.0.21     # via cloudfoundry-client
 prometheus-client==0.2.0
 prometheus-metrics-proto==18.1.1  # via aioprometheus
-protobuf==2.6.1           # via cloudfoundry-client, prometheus-metrics-proto
+protobuf==3.6.0           # via cloudfoundry-client, prometheus-metrics-proto
 psycopg2-binary==2.7.4
 psycopg2==2.7.4
 python-dotenv==0.8.2

@@ -56,7 +56,7 @@ async def test_is_cooldown_false(conn, create_action):
 
 
 @pytest.mark.asyncio
-async def test_is_cooldown_false(conn, create_action):
+async def test_is_cooldown_true(conn, create_action):
     await reset_database(conn)
     await create_action(dt.datetime.now(), 'test_app', 'test_space', 1)
 
@@ -66,13 +66,14 @@ async def test_is_cooldown_false(conn, create_action):
 def test_get_cpu_metrics(prom_exporter_text):
     results = [item for item in get_cpu_metrics(prom_exporter_text)]
 
-    expected = [{'metric': 'cpu', 'app': 'activity-stream', 'instance': 0, 'space': 'activity-stream', 'value': 0.0},
-     {'metric': 'cpu', 'app': 'activity-stream', 'instance': 0, 'space': 'activity-stream', 'value': 0.0},
-     {'metric': 'cpu', 'app': 'cert-monitor-production', 'instance': 0, 'space': 'webops', 'value': 0.0},
-     {'metric': 'cpu', 'app': 'cert-monitor-production', 'instance': 0, 'space': 'webops', 'value': 0.0},
-     {'metric': 'cpu', 'app': 'contact-ukti', 'instance': 0, 'space': 'exopps', 'value': 0.0},
-     {'metric': 'cpu', 'app': 'contact-ukti', 'instance': 1, 'space': 'exopps', 'value': 0.0},
-     {'metric': 'cpu', 'app': 'datahub', 'instance': 0, 'space': 'datahub', 'value': 0.0},
-     {'metric': 'cpu', 'app': 'datahub', 'instance': 3, 'space': 'datahub', 'value': 1.0}]
+    expected = [
+        {'metric': 'cpu', 'app': 'activity-stream', 'instance': 0, 'space': 'activity-stream', 'value': 0.0},
+        {'metric': 'cpu', 'app': 'activity-stream', 'instance': 0, 'space': 'activity-stream', 'value': 0.0},
+        {'metric': 'cpu', 'app': 'cert-monitor-production', 'instance': 0, 'space': 'webops', 'value': 0.0},
+        {'metric': 'cpu', 'app': 'cert-monitor-production', 'instance': 0, 'space': 'webops', 'value': 0.0},
+        {'metric': 'cpu', 'app': 'contact-ukti', 'instance': 0, 'space': 'exopps', 'value': 0.0},
+        {'metric': 'cpu', 'app': 'contact-ukti', 'instance': 1, 'space': 'exopps', 'value': 0.0},
+        {'metric': 'cpu', 'app': 'datahub', 'instance': 0, 'space': 'datahub', 'value': 0.0},
+        {'metric': 'cpu', 'app': 'datahub', 'instance': 3, 'space': 'datahub', 'value': 1.0}]
 
     assert results == expected

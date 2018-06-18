@@ -49,14 +49,13 @@ ENABLE_VERBOSE_OUTPUT = os.getenv('ENABLE_VERBOSE_OUTPUT', 'False') in TRUTHY_VA
 SENTRY_DSN = os.getenv('SENTRY_DSN')
 
 # prometheus metrics:
-PROM_GET_METRICS_TIME = Summary("get_metrics", "the time it takes to get application metrics")
-PROM_AUTOSCALER_CHECK_TIME = Summary("autoscaler_check_time",
-                                     "the time it takes for the autoscaler function to complete")
-PROM_SCALING_ACTIONS = Counter("scaling_actions", "a count of the number of scaling actions that have taken place")
-PROM_AUTOSCALING_ENABLED = Gauge("autoscaling_enabled", "number of apps that have autoscaling enabled")
-PROM_INSUFFICIENT_DATA = Gauge("insufficient_data", "number of apps that have insufficient data")
-PROM_APPS_AT_MIN_SCALE = Gauge("min_scale", "Apps that can't scale down due to being at min instances")
-PROM_APPS_AT_MAX_SCALE = Gauge("max_scale", "Apps that can't scale up due to being at max instances")
+PROM_GET_METRICS_TIME = Summary('get_metrics', 'the time it takes to get application metrics')
+PROM_AUTOSCALER_CHECK_TIME = Summary('autoscaler_check_time', 'the time it takes for the autoscaler check to complete')
+PROM_SCALING_ACTIONS = Counter('scaling_actions', 'a count of the number of scaling actions that have taken place')
+PROM_AUTOSCALING_ENABLED = Gauge('autoscaling_enabled', 'number of apps that have autoscaling enabled')
+PROM_INSUFFICIENT_DATA = Gauge('insufficient_data', 'number of apps that have insufficient data')
+PROM_APPS_AT_MIN_SCALE = Gauge('min_scal', 'apps that cannot scale down due to being at min instances')
+PROM_APPS_AT_MAX_SCALE = Gauge('max_scale', 'apps that cannot scale up due to being at max instances')
 
 
 dictConfig({
@@ -186,7 +185,7 @@ async def is_cooldown(app_name, space_name, cooldown, conn):
            "AND timestamp > now() - INTERVAL '%s min';"
 
     async with conn.cursor() as cur:
-        await cur.execute(stmt, (app_name,space_name,cooldown,))
+        await cur.execute(stmt, (app_name, space_name, cooldown,))
 
         result = await cur.fetchone()
         return result[0] != 0

@@ -2,7 +2,11 @@
 
 pytest
 pytest-asyncio
+pytest-aiohttp
 pytest-env
+pytest-localserver
+pytest-cov
+pytest-mock
 async_generator
-freezegun
+asynctest
 flake8

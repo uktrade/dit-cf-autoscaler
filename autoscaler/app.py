@@ -105,9 +105,7 @@ def get_cpu_metrics(prom_exporter_text):
 
 
 def group_cpu_metrics(metrics):
-    """
-    Group together each instances metrics per app/space
-    """
+    """Group together each instances metrics per app/space"""
     grouped_metrics = {}
     for metric in metrics:
         grouped_metrics.setdefault(metric['space'], {}).setdefault(metric['app'], []).append(metric['value'])
@@ -197,7 +195,7 @@ async def scale(app, space_name, instances, conn):
     # The API does not provide a public update method, so we're forced to use
     # the private _update method instead.
     loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, app.client.apps._update(app['metadata']['guid'], dict(instances=instances)))
+    await loop.run_in_executor(None, app.client.apps._update, app['metadata']['guid'], dict(instances=instances))
 
     async with conn.cursor() as cur:
         await cur.execute(stmt, (app['entity']['name'], space_name, instances))
@@ -210,29 +208,29 @@ async def get_avg_cpu(app_name, space_name, period, conn):
            "timestamp BETWEEN now() - INTERVAL '%s min' AND now() " \
            "GROUP BY app;"
 
-    logger.debug(stmt, app_name, space_name, period)
-
     async with conn.cursor() as cur:
         await cur.execute(stmt, (app_name, space_name, period,))
 
         if cur.rowcount == 0:
-            logger.debug('no row count')
             raise InsufficientData
 
         datapoints, avg_cpu = await cur.fetchone()
+        required_datapoints = (period * 60 / SCRAPE_INTERVAL_SECONDS) * 0.5
 
-        if datapoints > (period * 60 / SCRAPE_INTERVAL_SECONDS) * 0.7:
+        logger.debug('%s - required datapoints: %s got: %s', app_name, required_datapoints, datapoints)
+
+        if datapoints > required_datapoints:
             return avg_cpu
 
         raise InsufficientData
 
 
 @timer(PROM_GET_METRICS_TIME)
-async def get_metrics(conn):
+async def get_metrics(prometheus_exporter_url, username, password, conn):
     """Get app metrics from the prometheus exporter and store in database"""
 
-    if PROM_PAAS_EXPORTER_USERNAME:
-        auth = aiohttp.helpers.BasicAuth(PROM_PAAS_EXPORTER_USERNAME, PROM_PAAS_EXPORTER_PASSWORD, )
+    if username:
+        auth = aiohttp.helpers.BasicAuth(username, password, )
     else:
         auth = aiohttp.helpers.BasicAuth()
 
@@ -241,7 +239,7 @@ async def get_metrics(conn):
             return await response.text()
 
     async with aiohttp.ClientSession(auth=auth) as session:
-        raw_metrics = await fetch(session, PROM_PAAS_EXPORTER_URL)
+        raw_metrics = await fetch(session, prometheus_exporter_url)
 
     stmt = 'INSERT INTO metrics (timestamp, metric, space, app, instance_count, value) ' \
            'VALUES(now(), %s, %s, %s, %s, %s);'
@@ -299,7 +297,7 @@ async def autoscale(conn):
             else:
                 new_instance_count = params['instances'] + 1
                 await scale(app, space_name, new_instance_count, conn)
-                PROM_SCALING_ACTIONS.inc()
+                PROM_SCALING_ACTIONS.inc({})
 
                 await notify(app_name, f'scaled up to {new_instance_count} - avg cpu {average_cpu}')
 
@@ -310,7 +308,7 @@ async def autoscale(conn):
             else:
                 new_instance_count = params['instances'] - 1
                 await scale(app, space_name, new_instance_count, conn)
-                PROM_SCALING_ACTIONS.inc()
+                PROM_SCALING_ACTIONS.inc({})
 
                 await notify(app_name, f'scaled down to {new_instance_count} - avg cpu {average_cpu}')
 
@@ -318,6 +316,8 @@ async def autoscale(conn):
     PROM_APPS_AT_MIN_SCALE.set({}, counts['at_min_scale'])
     PROM_APPS_AT_MAX_SCALE.set({}, counts['at_max_scale'])
     PROM_AUTOSCALING_ENABLED.set({}, len(enabled_apps))
+
+    return counts
 
 
 async def periodic_run_autoscaler(pool):
@@ -335,8 +335,12 @@ async def periodic_get_metrics(pool):
     while True:
         async with pool.acquire() as conn:
             logger.info('retrieving metrics')
-            await get_metrics(conn)
+            await get_metrics(PROM_PAAS_EXPORTER_URL,
+                              PROM_PAAS_EXPORTER_USERNAME,
+                              PROM_PAAS_EXPORTER_PASSWORD,
+                              conn)
         await asyncio.sleep(SCRAPE_INTERVAL_SECONDS)
+        PROM_PAAS_EXPORTER_USERNAME
 
 
 async def periodic_remove_old_data(pool):

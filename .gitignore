@@ -3,3 +3,7 @@
 env
 __pycache__
 .pytest_cache
+cov_html
+htmlcov
+.coverage
+.DS_Store

@@ -20,6 +20,7 @@ from .cloudfoundry import get_client
 from dotenv import load_dotenv
 load_dotenv()
 
+
 class InsufficientData(Exception):
     pass
 
@@ -112,7 +113,8 @@ def group_cpu_metrics(metrics):
     for metric in metrics:
         grouped_metrics.setdefault(metric['space'], {}).setdefault(metric['app'], []).append(metric['value'])
 
-    return [(app, space, metric,) for space, apps in grouped_metrics.items() for app, metric in apps.items()]
+    return [(app, space, metric_values,)
+            for space, apps in grouped_metrics.items() for app, metric_values in apps.items()]
 
 
 def get_enabled_apps(cf_client):
@@ -285,32 +287,30 @@ async def autoscale(conn):
             await notify(app_name, 'insufficient data', is_verbose=True)
             continue
 
-        if params['low_threshold'] < average_cpu < params['high_threshold']:
+        if params['low_threshold'] <= average_cpu <= params['high_threshold']:
             await notify(app_name, f'is within bounds - current: {average_cpu}', is_verbose=True)
-            continue
 
-        if average_cpu > params['high_threshold']:
+        elif average_cpu > params['high_threshold']:
             if params['instances'] >= params['max_instances']:
                 counts['at_max_scale'] += 1
                 await notify(app_name, 'cannot scale up - already at max', is_verbose=True)
-                continue
+            else:
+                new_instance_count = params['instances'] + 1
+                await scale(app, space_name, new_instance_count, conn)
+                PROM_SCALING_ACTIONS.inc()
 
-            new_instance_count = params['instances'] + 1
+                await notify(app_name, f'scaled up to {new_instance_count} - avg cpu {average_cpu}')
 
         elif average_cpu < params['low_threshold']:
             if params['instances'] <= params['min_instances']:
                 counts['at_low_scale'] += 1
-                await notify(app_name, 'cannot scale down already at min', is_verbose=True)
-                continue
+                await notify(app_name, 'cannot scale down - already at min', is_verbose=True)
+            else:
+                new_instance_count = params['instances'] - 1
+                await scale(app, space_name, new_instance_count, conn)
+                PROM_SCALING_ACTIONS.inc()
 
-            new_instance_count = params['instances'] - 1
-
-        await scale(app, space_name, new_instance_count, conn)
-        PROM_SCALING_ACTIONS.inc()
-
-
-        await notify(app_name,
-                     f'scaled from {params["instances"]} to {new_instance_count} instances - avg cpu {average_cpu}')
+                await notify(app_name, f'scaled down to {new_instance_count} - avg cpu {average_cpu}')
 
     PROM_INSUFFICIENT_DATA.set({}, counts['insufficient_data'])
     PROM_APPS_AT_MIN_SCALE.set({}, counts['at_min_scale'])
@@ -397,4 +397,3 @@ if __name__ == '__main__':
     loop.set_exception_handler(custom_exception_handler)
     loop.create_task(main())
     loop.run_forever()
-

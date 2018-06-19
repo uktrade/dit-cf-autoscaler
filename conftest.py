@@ -84,12 +84,12 @@ async def create_action(conn):
 
 @pytest.fixture
 async def create_metric(conn):
-    async def _create(timestamp, app, space, instance_count, value):
+    async def _create(timestamp, app, space, instance_count, average_cpu):
         async with conn.cursor() as cur:
             await cur.execute(
-                'INSERT INTO metrics (timestamp, metric, app, space, instance_count, value) '
-                'VALUES(%s, \'cpu\', %s, %s, %s, %s)',
-                (timestamp, app, space, instance_count, value))
+                'INSERT INTO metrics (timestamp, app, space, instance_count, average_cpu) '
+                'VALUES(%s, %s, %s, %s, %s)',
+                (timestamp, app, space, instance_count, average_cpu))
 
     return _create
 

@@ -73,14 +73,14 @@ def test_get_cpu_metrics(prom_exporter_text):
     results = [item for item in get_cpu_metrics(prom_exporter_text)]
 
     expected = [
-        {'metric': 'cpu', 'app': 'activity-stream', 'instance': 0, 'space': 'activity-stream', 'value': 0.0},
-        {'metric': 'cpu', 'app': 'activity-stream', 'instance': 0, 'space': 'activity-stream', 'value': 0.0},
-        {'metric': 'cpu', 'app': 'cert-monitor-production', 'instance': 0, 'space': 'webops', 'value': 0.0},
-        {'metric': 'cpu', 'app': 'cert-monitor-production', 'instance': 0, 'space': 'webops', 'value': 0.0},
-        {'metric': 'cpu', 'app': 'contact-ukti', 'instance': 0, 'space': 'exopps', 'value': 0.0},
-        {'metric': 'cpu', 'app': 'contact-ukti', 'instance': 1, 'space': 'exopps', 'value': 0.0},
-        {'metric': 'cpu', 'app': 'datahub', 'instance': 0, 'space': 'datahub', 'value': 0.0},
-        {'metric': 'cpu', 'app': 'datahub', 'instance': 3, 'space': 'datahub', 'value': 1.0}]
+        {'app': 'activity-stream', 'instance': 0, 'space': 'activity-stream', 'value': 0.0},
+        {'app': 'activity-stream', 'instance': 0, 'space': 'activity-stream', 'value': 0.0},
+        {'app': 'cert-monitor-production', 'instance': 0, 'space': 'webops', 'value': 0.0},
+        {'app': 'cert-monitor-production', 'instance': 0, 'space': 'webops', 'value': 0.0},
+        {'app': 'contact-ukti', 'instance': 0, 'space': 'exopps', 'value': 0.0},
+        {'app': 'contact-ukti', 'instance': 1, 'space': 'exopps', 'value': 0.0},
+        {'app': 'datahub', 'instance': 0, 'space': 'datahub', 'value': 0.0},
+        {'app': 'datahub', 'instance': 3, 'space': 'datahub', 'value': 1.0}]
 
     assert results == expected
 
@@ -97,7 +97,7 @@ async def test_get_metrics(httpserver, prom_exporter_text, conn):
         result = await cur.fetchone()
         assert result[0] == 4
 
-        await cur.execute('SELECT app, space, instance_count, value FROM metrics ORDER BY app;')
+        await cur.execute('SELECT app, space, instance_count, average_cpu FROM metrics ORDER BY app;')
 
         results = []
         async for row in cur:

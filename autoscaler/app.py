@@ -96,7 +96,6 @@ def get_cpu_metrics(prom_exporter_text):
             # we're only interested in CPU metrics from web apps
             if sample[0] == 'cpu' and '__conduit' not in sample[1]['app']:
                 yield {
-                    'metric': sample[0],
                     'app': sample[1]['app'],
                     'instance': int(sample[1]['instance']),
                     'space': sample[1]['space'],
@@ -203,7 +202,7 @@ async def scale(app, space_name, instances, conn):
 
 async def get_avg_cpu(app_name, space_name, period, conn):
 
-    stmt = "SELECT count(*), avg(value) FROM metrics " \
+    stmt = "SELECT count(*), avg(average_cpu) FROM metrics " \
            "WHERE app=%s AND space=%s AND " \
            "timestamp BETWEEN now() - INTERVAL '%s min' AND now() " \
            "GROUP BY app;"
@@ -241,15 +240,14 @@ async def get_metrics(prometheus_exporter_url, username, password, conn):
     async with aiohttp.ClientSession(auth=auth) as session:
         raw_metrics = await fetch(session, prometheus_exporter_url)
 
-    stmt = 'INSERT INTO metrics (timestamp, metric, space, app, instance_count, value) ' \
-           'VALUES(now(), %s, %s, %s, %s, %s);'
+    stmt = 'INSERT INTO metrics (timestamp, space, app, instance_count, average_cpu) ' \
+           'VALUES(now(), %s, %s, %s, %s);'
 
     metrics = group_cpu_metrics(get_cpu_metrics(raw_metrics))
 
     async with conn.cursor() as cur:
         for space, app, metric_values in metrics:
             await cur.execute(stmt, (
-                'cpu',
                 app,
                 space,
                 len(metric_values),

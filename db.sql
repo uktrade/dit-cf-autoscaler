@@ -4,11 +4,10 @@ DROP TABLE IF EXISTS actions;
 CREATE TABLE metrics (
     id              SERIAL PRIMARY KEY,
     timestamp       TIMESTAMP,
-    metric          VARCHAR(100),
     app             VARCHAR(100),
     space           VARCHAR(100),
     instance_count  SMALLINT,
-    value       REAL
+    average_cpu     REAL
 );
 
 CREATE TABLE actions (

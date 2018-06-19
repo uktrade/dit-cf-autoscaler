@@ -1,0 +1,12 @@
+-r requirements.txt
+
+pytest
+pytest-asyncio
+pytest-aiohttp
+pytest-env
+pytest-localserver
+pytest-cov
+pytest-mock
+async_generator
+asynctest
+flake8

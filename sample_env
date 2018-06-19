@@ -1,0 +1,9 @@
+PROM_PAAS_EXPORTER_URL=https://exporter/metrics
+PROM_PAAS_EXPORTER_USERNAME=prom-basic-auth
+PROM_PAAS_EXPORTER_PASSWORD=prom-basic-auth
+SCRAPE_INTERVAL=5
+POSTGRES_DSN='dbname=autoscaler host=127.0.0.1'
+VERBOSE_OUTPUT=True
+CF_USERNAME=cf-username
+CF_PASSWORD=cf-password
+SLACK_URL=https://hooks.slack.com/services/dummy

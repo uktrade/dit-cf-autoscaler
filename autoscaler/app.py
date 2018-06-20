@@ -54,8 +54,9 @@ PROM_AUTOSCALER_CHECK_TIME = Summary('autoscaler_check_time', 'the time it takes
 PROM_SCALING_ACTIONS = Counter('scaling_actions', 'a count of the number of scaling actions that have taken place')
 PROM_AUTOSCALING_ENABLED = Gauge('autoscaling_enabled', 'number of apps that have autoscaling enabled')
 PROM_INSUFFICIENT_DATA = Gauge('insufficient_data', 'number of apps that have insufficient data')
-PROM_APPS_AT_MIN_SCALE = Gauge('min_scal', 'apps that cannot scale down due to being at min instances')
+PROM_APPS_AT_MIN_SCALE = Gauge('min_scale', 'apps that cannot scale down due to being at min instances')
 PROM_APPS_AT_MAX_SCALE = Gauge('max_scale', 'apps that cannot scale up due to being at max instances')
+PROM_APP_METRICS = Gauge('app_metrics', 'the number of apps that are supplying metrics')
 
 
 dictConfig({
@@ -245,6 +246,8 @@ async def get_metrics(prometheus_exporter_url, username, password, conn):
 
     metrics = group_cpu_metrics(get_cpu_metrics(raw_metrics))
 
+    PROM_APP_METRICS.set({}, len(metrics))
+
     async with conn.cursor() as cur:
         for space, app, metric_values in metrics:
             await cur.execute(stmt, (
@@ -359,6 +362,7 @@ async def start_webapp(port):
     prometheus_service.register(PROM_SCALING_ACTIONS)
     prometheus_service.register(PROM_APPS_AT_MIN_SCALE)
     prometheus_service.register(PROM_APPS_AT_MAX_SCALE)
+    prometheus_service.register(PROM_APP_METRICS)
 
     app = web.Application()
     app.add_routes([web.get('/check', lambda _: web.Response(text='OK')),

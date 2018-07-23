@@ -16,8 +16,8 @@ async def reset_database(conn):
 
 
 @pytest.mark.parametrize("test_input,expected", [
-    ({'AUTOSCALING': 'on'}, True),
-    ({'AUTOSCALING': 'off'}, False),
+    ({'X_AUTOSCALING': 'on'}, True),
+    ({'X_AUTOSCALING': 'off'}, False),
     ({}, False),
 ])
 def test_get_autoscaling_params_autoscaling(app_factory, test_input, expected):
@@ -29,7 +29,7 @@ def test_get_autoscaling_params_autoscaling(app_factory, test_input, expected):
 
 
 @pytest.mark.parametrize("test_input,expected", [
-    ({'AUTOSCALING_MIN': 1, 'AUTOSCALING_MAX': 20},
+    ({'X_AUTOSCALING_MIN': 1, 'X_AUTOSCALING_MAX': 20},
      {'min': 1, 'max': 20}),
     ({}, {'min': main.DEFAULT_MINIMUM_INSTANCES,
           'max': main.DEFAULT_MAXIMUM_INSTANCES}),
@@ -168,8 +168,8 @@ async def test_get_avg_cpu_insufficient_data(create_metric, conn):
 
 def test_get_enabled_apps(mocker, app_factory):
     apps = [
-        app_factory('test_app1', 'test_space1', AUTOSCALING='False'),
-        app_factory('test_app2', 'test_space2', AUTOSCALING='on'),
+        app_factory('test_app1', 'test_space1', X_AUTOSCALING='False'),
+        app_factory('test_app2', 'test_space2', X_AUTOSCALING='on'),
         app_factory('test_app3', 'test_space3')
     ]
 
@@ -185,7 +185,7 @@ def test_get_enabled_apps(mocker, app_factory):
 @pytest.mark.asyncio
 async def test_autoscale_is_cooldown(mocker, app_factory, conn, create_action):
     apps = [
-        app_factory('test_app', 'test_space', AUTOSCALING='on'),
+        app_factory('test_app', 'test_space', X_AUTOSCALING='on'),
     ]
 
     await create_action(dt.datetime.now(), 'test_app', 'test_space', 1)
@@ -202,7 +202,7 @@ async def test_autoscale_is_cooldown(mocker, app_factory, conn, create_action):
 async def test_autoscale_insufficient_data(mocker, app_factory, conn):
     await reset_database(conn)
     apps = [
-        app_factory('test_app', 'test_space', AUTOSCALING='on'),
+        app_factory('test_app', 'test_space', X_AUTOSCALING='on'),
     ]
 
     mock_get_client = mocker.patch('autoscaler.app.get_client')
@@ -219,7 +219,7 @@ async def test_autoscale_at_min_scale(mocker, app_factory, conn, create_metric):
     await reset_database(conn)
 
     apps = [
-        app_factory('test_app', 'test_space', instances=2, AUTOSCALING='on', AUTOSCALING_MIN=2),
+        app_factory('test_app', 'test_space', instances=2, X_AUTOSCALING='on', X_AUTOSCALING_MIN=2),
     ]
 
     for i in range(35):
@@ -240,7 +240,7 @@ async def test_autoscale_at_max_scale(mocker, app_factory, conn, create_metric):
     await reset_database(conn)
 
     apps = [
-        app_factory('test_app', 'test_space', instances=10, AUTOSCALING='on', AUTOSCALING_MAX=10),
+        app_factory('test_app', 'test_space', instances=10, X_AUTOSCALING='on', X_AUTOSCALING_MAX=10),
     ]
 
     for i in range(35):
@@ -262,7 +262,7 @@ async def test_autoscale_scale_up(mocker, app_factory, conn, create_metric):
     await reset_database(conn)
 
     apps = [
-        app_factory('test_app', 'test_space', instances=5, AUTOSCALING='on', AUTOSCALING_MAX=10),
+        app_factory('test_app', 'test_space', instances=5, X_AUTOSCALING='on', X_AUTOSCALING_MAX=10),
     ]
 
     for i in range(35):
@@ -289,7 +289,7 @@ async def test_autoscale_scale_down(mocker, app_factory, conn, create_metric):
     await reset_database(conn)
 
     apps = [
-        app_factory('test_app', 'test_space', instances=5, AUTOSCALING='on', AUTOSCALING_MIN=2),
+        app_factory('test_app', 'test_space', instances=5, X_AUTOSCALING='on', X_AUTOSCALING_MIN=2),
     ]
 
     for i in range(35):

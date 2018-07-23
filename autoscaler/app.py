@@ -120,7 +120,7 @@ def get_enabled_apps(cf_client):
     kwargs = {'results-per-page': 15}
     for app in cf_client.apps.list(**kwargs):
         app_conf = app['entity']['environment_json'] or {}
-        status = app_conf.get('AUTOSCALING', 'False')
+        status = app_conf.get('X_AUTOSCALING', 'False')
 
         if status in TRUTHY_VALUES:
             enabled_apps.append(app)
@@ -133,12 +133,12 @@ def get_autoscaling_params(cf_app):
 
     app_conf = cf_app['entity']['environment_json'] or {}
 
-    enabled = app_conf.get('AUTOSCALING', 'False') in TRUTHY_VALUES
+    enabled = app_conf.get('X_AUTOSCALING', 'False') in TRUTHY_VALUES
 
     return {
         'enabled': enabled,
-        'min_instances': int(app_conf.get('AUTOSCALING_MIN', DEFAULT_MINIMUM_INSTANCES)),
-        'max_instances': int(app_conf.get('AUTOSCALING_MAX', DEFAULT_MAXIMUM_INSTANCES)),
+        'min_instances': int(app_conf.get('X_AUTOSCALING_MIN', DEFAULT_MINIMUM_INSTANCES)),
+        'max_instances': int(app_conf.get('X_AUTOSCALING_MAX', DEFAULT_MAXIMUM_INSTANCES)),
         'instances': int(cf_app['entity']['instances']),
         'threshold_period': DEFAULT_THRESHOLD_PERIOD_MINUTES,
         'high_threshold': DEFAULT_HIGH_THRESHOLD_CPU_PERCENTAGE,

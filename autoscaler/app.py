@@ -278,6 +278,17 @@ async def autoscale(conn):
             await notify(app_name, 'is in cool down period', is_verbose=True)
             continue
 
+        # if we're above or below min/max instances then scale up/down by one instance
+        if params['instances'] > params['max_instances']:
+            await notify(app_name, 'scaled down as instance count is above maximum')
+            await scale(app, space_name, params['instances'] - 1, conn)
+            continue
+
+        if params['instances'] < params['min_instances']:
+            await notify(app_name, 'scaled up as instance count is below minimum')
+            await scale(app, space_name, params['instances'] + 1, conn)
+            continue
+
         try:
             average_cpu = await get_avg_cpu(app_name, space_name, params['threshold_period'], conn)
         except InsufficientData:

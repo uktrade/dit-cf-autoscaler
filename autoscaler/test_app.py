@@ -202,7 +202,7 @@ async def test_autoscale_is_cooldown(mocker, app_factory, conn, create_action):
 async def test_autoscale_insufficient_data(mocker, app_factory, conn):
     await reset_database(conn)
     apps = [
-        app_factory('test_app', 'test_space', X_AUTOSCALING='on'),
+        app_factory('test_app', 'test_space', X_AUTOSCALING='on', X_AUTOSCALING_MIN=1),
     ]
 
     mock_get_client = mocker.patch('autoscaler.app.get_client')
@@ -308,3 +308,39 @@ async def test_autoscale_scale_down(mocker, app_factory, conn, create_metric):
 
     assert mock_notify.called
     assert mock_notify.call_args[0] == ('test_app', 'scaled down to 4 - avg cpu 5.0')
+
+
+@pytest.mark.asyncio
+async def test_autoscale_scales_up_if_below_min(mocker, app_factory, conn):
+
+    await reset_database(conn)
+
+    apps = [
+        app_factory('test_app', 'test_space', instances=1, X_AUTOSCALING='on', X_AUTOSCALING_MIN=2),
+    ]
+
+    mock_get_client = mocker.patch('autoscaler.app.get_client')
+    mock_get_client.return_value.apps.list.return_value = apps
+    with async_patch('autoscaler.app.notify') as mock_notify:
+        await autoscale(conn)
+
+    assert mock_notify.called
+    assert mock_notify.call_args[0] == ('test_app', 'scaled up as instance count is below minimum')
+
+
+@pytest.mark.asyncio
+async def test_autoscale_scales_down_if_above_max(mocker, app_factory, conn):
+
+    await reset_database(conn)
+
+    apps = [
+        app_factory('test_app', 'test_space', instances=11, X_AUTOSCALING='on', X_AUTOSCALING_MAX=10),
+    ]
+
+    mock_get_client = mocker.patch('autoscaler.app.get_client')
+    mock_get_client.return_value.apps.list.return_value = apps
+    with async_patch('autoscaler.app.notify') as mock_notify:
+        await autoscale(conn)
+
+    assert mock_notify.called
+    assert mock_notify.call_args[0] == ('test_app', 'scaled down as instance count is above maximum')

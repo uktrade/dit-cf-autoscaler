@@ -208,11 +208,10 @@ async def test_autoscale_insufficient_data(mocker, app_factory, conn):
     mock_get_client = mocker.patch('autoscaler.app.get_client')
     mock_get_client.return_value.apps.list.return_value = apps
     with async_patch('autoscaler.app.notify') as mock_notify:
-        counts = await autoscale(conn)
+        with async_patch('autoscaler.app.scale') as mock_scale:
+            await autoscale(conn)
 
-    assert mock_notify.call_args[0] == ('test_app', 'insufficient data')
-    assert counts['insufficient_data'] == 1
-
+    assert not mock_scale.called
 
 @pytest.mark.asyncio
 async def test_autoscale_at_min_scale(mocker, app_factory, conn, create_metric):
@@ -228,11 +227,11 @@ async def test_autoscale_at_min_scale(mocker, app_factory, conn, create_metric):
     mock_get_client = mocker.patch('autoscaler.app.get_client')
     mock_get_client.return_value.apps.list.return_value = apps
     with async_patch('autoscaler.app.notify') as mock_notify:
-        counts = await autoscale(conn)
+        with async_patch('autoscaler.app.scale') as mock_scale:
+            await autoscale(conn)
 
-    assert counts['at_min_scale'] == 1
-    assert mock_notify.called
-    assert mock_notify.call_args[0] == ('test_app', 'cannot scale down - already at min')
+    assert not mock_notify.called
+    assert not mock_scale.called
 
 
 @pytest.mark.asyncio
@@ -249,11 +248,11 @@ async def test_autoscale_at_max_scale(mocker, app_factory, conn, create_metric):
     mock_get_client = mocker.patch('autoscaler.app.get_client')
     mock_get_client.return_value.apps.list.return_value = apps
     with async_patch('autoscaler.app.notify') as mock_notify:
-        counts = await autoscale(conn)
+        with async_patch('autoscaler.app.scale') as mock_scale:
+            await autoscale(conn)
 
-    assert counts['at_max_scale'] == 1
-    assert mock_notify.called
-    assert mock_notify.call_args[0] == ('test_app', 'cannot scale up - already at max')
+    assert not mock_notify.called
+    assert not mock_scale.called
 
 
 @pytest.mark.asyncio

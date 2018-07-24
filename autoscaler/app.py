@@ -54,8 +54,6 @@ PROM_AUTOSCALER_CHECK_TIME = Summary('autoscaler_check_time', 'the time it takes
 PROM_SCALING_ACTIONS = Counter('scaling_actions', 'a count of the number of scaling actions that have taken place')
 PROM_AUTOSCALING_ENABLED = Gauge('autoscaling_enabled', 'number of apps that have autoscaling enabled')
 PROM_INSUFFICIENT_DATA = Gauge('insufficient_data', 'number of apps that have insufficient data')
-PROM_APPS_AT_MIN_SCALE = Gauge('min_scal', 'apps that cannot scale down due to being at min instances')
-PROM_APPS_AT_MAX_SCALE = Gauge('max_scale', 'apps that cannot scale up due to being at max instances')
 
 
 dictConfig({
@@ -147,15 +145,12 @@ def get_autoscaling_params(cf_app):
     }
 
 
-async def notify(app_name, message, is_verbose=False):
+async def notify(app_name, message):
 
-    _logger = logger.debug if is_verbose else logger.info
-
-    _logger(f'{app_name}: {message}')
+    logger.info(f'{app_name}: {message}')
 
     if SLACK_URL:
-        if not is_verbose or is_verbose and ENABLE_VERBOSE_OUTPUT:
-            await slack_notify(app_name, message)
+        await slack_notify(app_name, message)
 
 
 async def slack_notify(app_name, message):
@@ -262,71 +257,52 @@ async def autoscale(conn):
     client = await loop.run_in_executor(None, get_client, CF_USERNAME, CF_PASSWORD)
     enabled_apps = await loop.run_in_executor(None, get_enabled_apps, client)
 
-    counts = {
-        'at_min_scale': 0,
-        'at_max_scale': 0,
-        'insufficient_data': 0
-    }
+    insufficient_data_count = 0
 
     for app in enabled_apps:
         app_name = app['entity']['name']
         space = await loop.run_in_executor(None, app.space)
         space_name = space['entity']['name']
         params = get_autoscaling_params(app)
+        notification = None
+        desired_instance_count = params['instances']
 
-        if await is_cooldown(app_name, space_name, params['cooldown'], conn):
-            await notify(app_name, 'is in cool down period', is_verbose=True)
-            continue
-
-        # if we're above or below min/max instances then scale up/down by one instance
-        if params['instances'] > params['max_instances']:
-            await notify(app_name, 'scaled down as instance count is above maximum')
-            await scale(app, space_name, params['instances'] - 1, conn)
-            continue
-
-        if params['instances'] < params['min_instances']:
-            await notify(app_name, 'scaled up as instance count is below minimum')
-            await scale(app, space_name, params['instances'] + 1, conn)
-            continue
+        cooldown = await is_cooldown(app_name, space_name, params['cooldown'], conn)
 
         try:
             average_cpu = await get_avg_cpu(app_name, space_name, params['threshold_period'], conn)
         except InsufficientData:
-            counts['insufficient_data'] += 1
-            await notify(app_name, 'insufficient data', is_verbose=True)
-            continue
+            insufficient_data_count += 1
+            insufficient_data = True
+        else:
+            insufficient_data = False
 
-        if params['low_threshold'] <= average_cpu <= params['high_threshold']:
-            await notify(app_name, f'is within bounds - current: {average_cpu}', is_verbose=True)
+        if params['instances'] > params['max_instances'] and not cooldown:
+            notification = 'scaled down as instance count is above maximum'
+            desired_instance_count = params['instances'] - 1
 
-        elif average_cpu > params['high_threshold']:
-            if params['instances'] >= params['max_instances']:
-                counts['at_max_scale'] += 1
-                await notify(app_name, 'cannot scale up - already at max', is_verbose=True)
-            else:
-                new_instance_count = params['instances'] + 1
-                await scale(app, space_name, new_instance_count, conn)
-                PROM_SCALING_ACTIONS.inc({})
+        if params['instances'] < params['min_instances'] and not cooldown:
+            notification = 'scaled up as instance count is below minimum'
+            desired_instance_count = params['instances'] + 1
 
-                await notify(app_name, f'scaled up to {new_instance_count} - avg cpu {average_cpu}')
+        if not cooldown and not insufficient_data:
+            if average_cpu > params['high_threshold'] and params['instances'] < params['max_instances']:
+                desired_instance_count = params['instances'] + 1
+                notification = f'scaled up to {desired_instance_count} - avg cpu {average_cpu}'
 
-        elif average_cpu < params['low_threshold']:
-            if params['instances'] <= params['min_instances']:
-                counts['at_min_scale'] += 1
-                await notify(app_name, 'cannot scale down - already at min', is_verbose=True)
-            else:
-                new_instance_count = params['instances'] - 1
-                await scale(app, space_name, new_instance_count, conn)
-                PROM_SCALING_ACTIONS.inc({})
+            if average_cpu < params['low_threshold'] and params['instances'] > params['min_instances']:
+                desired_instance_count = params['instances'] - 1
+                notification = f'scaled down to {desired_instance_count} - avg cpu {average_cpu}'
 
-                await notify(app_name, f'scaled down to {new_instance_count} - avg cpu {average_cpu}')
+        if notification:
+            await notify(app_name, notification)
 
-    PROM_INSUFFICIENT_DATA.set({}, counts['insufficient_data'])
-    PROM_APPS_AT_MIN_SCALE.set({}, counts['at_min_scale'])
-    PROM_APPS_AT_MAX_SCALE.set({}, counts['at_max_scale'])
+        if desired_instance_count != params['instances']:
+            await scale(app, space_name, desired_instance_count, conn)
+            PROM_SCALING_ACTIONS.inc({})
+
+    PROM_INSUFFICIENT_DATA.set({}, insufficient_data_count)
     PROM_AUTOSCALING_ENABLED.set({}, len(enabled_apps))
-
-    return counts
 
 
 async def periodic_run_autoscaler(pool):
@@ -368,8 +344,6 @@ async def start_webapp(port):
     prometheus_service.register(PROM_AUTOSCALING_ENABLED)
     prometheus_service.register(PROM_INSUFFICIENT_DATA)
     prometheus_service.register(PROM_SCALING_ACTIONS)
-    prometheus_service.register(PROM_APPS_AT_MIN_SCALE)
-    prometheus_service.register(PROM_APPS_AT_MAX_SCALE)
 
     app = web.Application()
     app.add_routes([web.get('/check', lambda _: web.Response(text='OK')),
@@ -384,7 +358,7 @@ async def start_webapp(port):
 async def main():
     loop = asyncio.get_event_loop()
 
-    await notify('general', 'starting autoscaler', is_verbose=True)
+    await notify('general', 'starting autoscaler')
 
     logger.info('starting web interface on %s', PORT)
     await start_webapp(PORT)

@@ -9,6 +9,6 @@ The following environment variables can be set on a Cloudfoundry application to 
 
 NOTE: the app does not need to be restaged for the autoscaler to pick up environment changes.
 
-`AUTOSCALING` - can be set to on/off or test. 'test' means autoscaler will report potential autoscaling actions only.
-`AUTOSCALING_MIN` - the minimum number of instances - default: 2
-`AUTOSCALING_MAX` - the maximum number of instances - default: 10
+`X_AUTOSCALING` - can be set to on/off or test. 'test' means autoscaler will report potential autoscaling actions only.
+`X_AUTOSCALING_MIN` - the minimum number of instances - default: 2
+`X_AUTOSCALING_MAX` - the maximum number of instances - default: 10

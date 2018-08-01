@@ -9,4 +9,3 @@ aiopg
 python-dotenv
 cloudfoundry-client
 -e git+http://github.com/amitsaha/aiohttp-prometheus.git#egg=aiohttp_prometheus
-#-e git+http://github.com/lgarvey/cf-python-client#egg=cloudfoundry_client

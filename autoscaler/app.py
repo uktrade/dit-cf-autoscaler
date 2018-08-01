@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+
+from functools import partial
+
 import os
 import logging
 from logging.config import dictConfig
@@ -12,7 +15,7 @@ from aioprometheus import Counter, Gauge, Service, Summary, timer
 import aiopg
 
 from raven import Client
-from raven_aiohttp import AioHttpTransport
+from raven_aiohttp import QueuedAioHttpTransport
 
 from prometheus_client.parser import text_string_to_metric_families
 from .cloudfoundry import get_client
@@ -223,16 +226,11 @@ async def get_avg_cpu(app_name, space_name, period, conn):
 async def get_metrics(prometheus_exporter_url, username, password, conn):
     """Get app metrics from the prometheus exporter and store in database"""
 
-    if username:
-        auth = aiohttp.helpers.BasicAuth(username, password, )
-    else:
-        auth = aiohttp.helpers.BasicAuth()
-
     async def fetch(session, url):
         async with session.get(url) as response:
             return await response.text()
 
-    async with aiohttp.ClientSession(auth=auth) as session:
+    async with aiohttp.ClientSession() as session:
         raw_metrics = await fetch(session, prometheus_exporter_url)
 
     stmt = 'INSERT INTO metrics (timestamp, space, app, instance_count, average_cpu) ' \
@@ -307,6 +305,7 @@ async def autoscale(conn):
 
 async def periodic_run_autoscaler(pool):
     """Periodically scan apps, check autoscaling config and status"""
+
     while True:
         async with pool.acquire() as conn:
             logger.info('checking app autoscaling status')
@@ -325,10 +324,10 @@ async def periodic_get_metrics(pool):
                               PROM_PAAS_EXPORTER_PASSWORD,
                               conn)
         await asyncio.sleep(SCRAPE_INTERVAL_SECONDS)
-        PROM_PAAS_EXPORTER_USERNAME
 
 
 async def periodic_remove_old_data(pool):
+
     while True:
         logger.info('removing old data')
         async with pool.acquire() as conn:
@@ -355,34 +354,31 @@ async def start_webapp(port):
     await site.start()
 
 
-async def main():
+async def main(sentry_client):
     loop = asyncio.get_event_loop()
-
-    await notify('general', 'starting autoscaler')
 
     logger.info('starting web interface on %s', PORT)
     await start_webapp(PORT)
 
-    async with aiopg.create_pool(DATABASE_URL) as pool:
-        await asyncio.gather(
-            loop.create_task(periodic_get_metrics(pool)),
-            loop.create_task(periodic_run_autoscaler(pool)),
-            loop.create_task(periodic_remove_old_data(pool)))
+    try:
+        async with aiopg.create_pool(DATABASE_URL) as pool:
+            await asyncio.gather(
+                loop.create_task(periodic_get_metrics(pool)),
+                loop.create_task(periodic_run_autoscaler(pool)),
+                loop.create_task(periodic_remove_old_data(pool)))
 
-
-def custom_exception_handler(loop, context):
-    loop.default_exception_handler(context)
-
-    print(context)
-    loop.stop()
+    except BaseException:
+        sentry_client.captureException()
+        await sentry_client.remote.get_transport().close()
+        loop.stop()
 
 
 if __name__ == '__main__':
-    if SENTRY_DSN:
-        sentry_client = Client(SENTRY_DSN, ransport=AioHttpTransport)
+    sentry_client = Client(SENTRY_DSN, transport=partial(QueuedAioHttpTransport, workers=5, qsize=1000))
 
     loop = asyncio.get_event_loop()
     loop.set_debug(DEBUG)
-    loop.set_exception_handler(custom_exception_handler)
-    loop.create_task(main())
+    loop.create_task(main(sentry_client))
     loop.run_forever()
+
+

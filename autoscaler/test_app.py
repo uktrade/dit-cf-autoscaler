@@ -4,7 +4,7 @@ import pytest
 from asynctest import patch as async_patch
 
 from autoscaler.app import get_autoscaling_params, is_cooldown, get_cpu_metrics, get_metrics, \
-    start_webapp, scale, InsufficientData, get_avg_cpu, get_enabled_apps, autoscale
+    start_webapp, scale, InsufficientData, get_avg_cpu, get_enabled_apps, autoscale, is_new_app
 
 from autoscaler import app as main
 
@@ -49,7 +49,8 @@ def test_test_get_autoscaling_params(app_factory):
     assert params['threshold_period'] == main.DEFAULT_THRESHOLD_PERIOD_MINUTES
     assert params['high_threshold'] == main.DEFAULT_HIGH_THRESHOLD_CPU_PERCENTAGE
     assert params['low_threshold'] == main.DEFAULT_LOW_THRESHOLD_CPU_PERCENTAGE
-    assert params['cooldown'] == main.DEFAULT_COOLDOWN_PERIOD_MINUTES
+    assert params['scale_up_delay'] == main.DEFAULT_SCALE_UP_DELAY_MINUTES
+    assert params['scale_down_delay'] == main.DEFAULT_SCALE_DOWN_DELAY_MINUTES
 
 
 @pytest.mark.asyncio
@@ -222,7 +223,7 @@ async def test_autoscale_at_min_scale(mocker, app_factory, conn, create_metric):
     ]
 
     for i in range(35):
-        await create_metric(dt.datetime.now()-dt.timedelta(minutes=1), 'test_app', 'test_space', 2, 1)
+        await create_metric(dt.datetime.now()-dt.timedelta(seconds=30), 'test_app', 'test_space', 2, 1)
 
     mock_get_client = mocker.patch('autoscaler.app.get_client')
     mock_get_client.return_value.apps.list.return_value = apps
@@ -242,8 +243,8 @@ async def test_autoscale_at_max_scale(mocker, app_factory, conn, create_metric):
         app_factory('test_app', 'test_space', instances=10, X_AUTOSCALING='on', X_AUTOSCALING_MAX=10),
     ]
 
-    for i in range(35):
-        await create_metric(dt.datetime.now()-dt.timedelta(minutes=1), 'test_app', 'test_space', 2, 95)
+    for i in range(10):
+        await create_metric(dt.datetime.now()-dt.timedelta(seconds=30), 'test_app', 'test_space', 2, 95)
 
     mock_get_client = mocker.patch('autoscaler.app.get_client')
     mock_get_client.return_value.apps.list.return_value = apps
@@ -264,8 +265,12 @@ async def test_autoscale_scale_up(mocker, app_factory, conn, create_metric):
         app_factory('test_app', 'test_space', instances=5, X_AUTOSCALING='on', X_AUTOSCALING_MAX=10),
     ]
 
+    # pass is_new_app test - this ensures that we don't attempt to autoscale transitory apps created
+    # as part of blue/green depoloyment process.
+    await create_metric(dt.datetime.now() - dt.timedelta(minutes=31), 'test_app', 'test_space', 2, 95)
+
     for i in range(35):
-        await create_metric(dt.datetime.now() - dt.timedelta(minutes=1), 'test_app', 'test_space', 2, 95)
+        await create_metric(dt.datetime.now() - dt.timedelta(seconds=30), 'test_app', 'test_space', 2, 95)
 
     mock_get_client = mocker.patch('autoscaler.app.get_client')
     mock_get_client.return_value.apps.list.return_value = apps
@@ -291,8 +296,10 @@ async def test_autoscale_scale_down(mocker, app_factory, conn, create_metric):
         app_factory('test_app', 'test_space', instances=5, X_AUTOSCALING='on', X_AUTOSCALING_MIN=2),
     ]
 
-    for i in range(35):
-        await create_metric(dt.datetime.now() - dt.timedelta(minutes=1), 'test_app', 'test_space', 5, 5)
+    await create_metric(dt.datetime.now() - dt.timedelta(minutes=30), 'test_app', 'test_space', 5, 5)
+
+    for i in range(10):
+        await create_metric(dt.datetime.now() - dt.timedelta(seconds=30), 'test_app', 'test_space', 5, 5)
 
     mock_get_client = mocker.patch('autoscaler.app.get_client')
     mock_get_client.return_value.apps.list.return_value = apps
@@ -310,13 +317,18 @@ async def test_autoscale_scale_down(mocker, app_factory, conn, create_metric):
 
 
 @pytest.mark.asyncio
-async def test_autoscale_scales_up_if_below_min(mocker, app_factory, conn):
+async def test_autoscale_scales_up_if_below_min(mocker, app_factory, create_metric, conn):
 
     await reset_database(conn)
 
     apps = [
         app_factory('test_app', 'test_space', instances=1, X_AUTOSCALING='on', X_AUTOSCALING_MIN=2),
     ]
+
+    await create_metric(dt.datetime.now() - dt.timedelta(minutes=30), 'test_app', 'test_space', 5, 5)
+
+    for i in range(10):
+        await create_metric(dt.datetime.now()-dt.timedelta(seconds=30), 'test_app', 'test_space', 2, 95)
 
     mock_get_client = mocker.patch('autoscaler.app.get_client')
     mock_get_client.return_value.apps.list.return_value = apps
@@ -328,13 +340,18 @@ async def test_autoscale_scales_up_if_below_min(mocker, app_factory, conn):
 
 
 @pytest.mark.asyncio
-async def test_autoscale_scales_down_if_above_max(mocker, app_factory, conn):
+async def test_autoscale_scales_down_if_above_max(mocker, app_factory, create_metric, conn):
 
     await reset_database(conn)
 
     apps = [
         app_factory('test_app', 'test_space', instances=11, X_AUTOSCALING='on', X_AUTOSCALING_MAX=10),
     ]
+
+    await create_metric(dt.datetime.now() - dt.timedelta(minutes=30), 'test_app', 'test_space', 5, 5)
+
+    for i in range(10):
+        await create_metric(dt.datetime.now()-dt.timedelta(seconds=30), 'test_app', 'test_space', 2, 95)
 
     mock_get_client = mocker.patch('autoscaler.app.get_client')
     mock_get_client.return_value.apps.list.return_value = apps
@@ -343,3 +360,23 @@ async def test_autoscale_scales_down_if_above_max(mocker, app_factory, conn):
 
     assert mock_notify.called
     assert mock_notify.call_args[0] == ('test_app', 'scaled down as instance count is above maximum')
+
+
+@pytest.mark.asyncio
+async def test_is_new_app_true(conn):
+
+    await reset_database(conn)
+
+    assert await is_new_app('test_app', 'test_space', conn)
+
+
+@pytest.mark.asyncio
+async def test_is_new_app_false(create_metric, conn):
+    await reset_database(conn)
+
+    timestamp = dt.datetime.now() - dt.timedelta(15)
+
+    await create_metric(timestamp, 'test_app', 'test_space', 1, 1)
+
+    assert not await is_new_app('test_app', 'test_space', conn)
+

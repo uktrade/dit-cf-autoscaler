@@ -44,11 +44,11 @@ CF_PASSWORD = os.getenv('CF_PASSWORD')
 SLACK_URL = os.getenv('SLACK_URL')
 DEFAULT_HIGH_THRESHOLD_CPU_PERCENTAGE = int(os.getenv('DEFAULT_HIGH_THRESHOLD_CPU_PERCENTAGE', 50))
 DEFAULT_LOW_THRESHOLD_CPU_PERCENTAGE = int(os.getenv('DEFAULT_LOW_THRESHOLD_CPU_PERCENTAGE', 10))
-DEFAULT_THRESHOLD_PERIOD_MINUTES = int(os.getenv('DEFAULT_THRESHOLD_PERIOD_MINUTES', 5))
+DEFAULT_THRESHOLD_PERIOD_MINUTES = int(os.getenv('DEFAULT_THRESHOLD_PERIOD_MINUTES', 1))
 DEFAULT_MINIMUM_INSTANCES = int(os.getenv('DEFAULT_MINIMUM_INSTANCES', 2))
 DEFAULT_MAXIMUM_INSTANCES = int(os.getenv('DEFAULT_MAXIMUM_INSTANCES', 10))
-DEFAULT_COOLDOWN_PERIOD_MINUTES = int(os.getenv('DEFAULT_COOLDOWN_PERIOD_MINUTES', 5))
-ENABLE_VERBOSE_OUTPUT = os.getenv('ENABLE_VERBOSE_OUTPUT', 'False') in TRUTHY_VALUES
+DEFAULT_SCALE_UP_DELAY_MINUTES = int(os.getenv('DEFAULT_SCALE_UP_DELAY_MINUTES', 1))
+DEFAULT_SCALE_DOWN_DELAY_MINUTES = int(os.getenv('DEFAULT_SCALE_DOWN_DELAY_MINUTES', 2))
 SENTRY_DSN = os.getenv('SENTRY_DSN')
 
 # prometheus metrics:
@@ -144,7 +144,8 @@ def get_autoscaling_params(cf_app):
         'threshold_period': DEFAULT_THRESHOLD_PERIOD_MINUTES,
         'high_threshold': DEFAULT_HIGH_THRESHOLD_CPU_PERCENTAGE,
         'low_threshold': DEFAULT_LOW_THRESHOLD_CPU_PERCENTAGE,
-        'cooldown': DEFAULT_COOLDOWN_PERIOD_MINUTES,
+        'scale_up_delay': DEFAULT_SCALE_UP_DELAY_MINUTES,
+        'scale_down_delay': DEFAULT_SCALE_DOWN_DELAY_MINUTES,
     }
 
 
@@ -222,6 +223,21 @@ async def get_avg_cpu(app_name, space_name, period, conn):
         raise InsufficientData
 
 
+async def is_new_app(app_name, space_name, conn):
+    """Only attempt to scale apps that have existed for a few minutes at least.
+    This stops the autoscaler from interfering with blue/green deployments"""
+
+    stmt = "SELECT count(*) FROM metrics " \
+           "WHERE app=%s AND space=%s AND " \
+           "timestamp < NOW() - INTERVAL '10 MINUTE'" \
+           "GROUP BY app;"
+
+    async with conn.cursor() as cur:
+        await cur.execute(stmt, (app_name, space_name,))
+
+        return cur.rowcount == 0
+
+
 @timer(PROM_GET_METRICS_TIME)
 async def get_metrics(prometheus_exporter_url, username, password, conn):
     """Get app metrics from the prometheus exporter and store in database"""
@@ -265,32 +281,39 @@ async def autoscale(conn):
         notification = None
         desired_instance_count = params['instances']
 
-        cooldown = await is_cooldown(app_name, space_name, params['cooldown'], conn)
+        # to avoid issues with blue/green deployments we only want to manage apps
+        # that have several minutes of data, indicating that it's not a transitory
+        # app created as part of the deployment process
+        if await is_new_app(app_name, space_name, conn):
+            continue
 
         try:
             average_cpu = await get_avg_cpu(app_name, space_name, params['threshold_period'], conn)
         except InsufficientData:
             insufficient_data_count += 1
-            insufficient_data = True
-        else:
-            insufficient_data = False
+            continue
 
-        if params['instances'] > params['max_instances'] and not cooldown:
+        if params['instances'] > params['max_instances']:
             notification = 'scaled down as instance count is above maximum'
             desired_instance_count = params['instances'] - 1
 
-        if params['instances'] < params['min_instances'] and not cooldown:
+        elif params['instances'] < params['min_instances']:
             notification = 'scaled up as instance count is below minimum'
             desired_instance_count = params['instances'] + 1
 
-        if not cooldown and not insufficient_data:
-            if average_cpu > params['high_threshold'] and params['instances'] < params['max_instances']:
-                desired_instance_count = params['instances'] + 1
-                notification = f'scaled up to {desired_instance_count} - avg cpu {average_cpu}'
+        elif (average_cpu < params['low_threshold'] and
+            params['instances'] > params['min_instances'] and
+            not await is_cooldown(app_name, space_name, params['scale_down_delay'], conn)):
 
-            if average_cpu < params['low_threshold'] and params['instances'] > params['min_instances']:
-                desired_instance_count = params['instances'] - 1
-                notification = f'scaled down to {desired_instance_count} - avg cpu {average_cpu}'
+            desired_instance_count = params['instances'] - 1
+            notification = f'scaled down to {desired_instance_count} - avg cpu {average_cpu}'
+
+        elif (average_cpu > params['high_threshold'] and
+            params['instances'] < params['max_instances'] and
+            not await is_cooldown(app_name, space_name, params['scale_up_delay'], conn)):
+
+            desired_instance_count = params['instances'] + 1
+            notification = f'scaled up to {desired_instance_count} - avg cpu {average_cpu}'
 
         if notification:
             await notify(app_name, notification)
@@ -327,7 +350,6 @@ async def periodic_get_metrics(pool):
 
 
 async def periodic_remove_old_data(pool):
-
     while True:
         logger.info('removing old data')
         async with pool.acquire() as conn:
@@ -380,5 +402,3 @@ if __name__ == '__main__':
     loop.set_debug(DEBUG)
     loop.create_task(main(sentry_client))
     loop.run_forever()
-
-

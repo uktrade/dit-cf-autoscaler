@@ -355,7 +355,7 @@ async def periodic_remove_old_data(pool):
         async with pool.acquire() as conn:
             async with conn.cursor() as cur:
                 cur.execute("DELETE FROM metrics where timestamp < now() - INTERVAL '20 min';")
-        await asyncio.sleep(300)
+        await asyncio.sleep(120)
 
 
 async def start_webapp(port):

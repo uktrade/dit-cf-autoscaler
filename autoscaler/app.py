@@ -142,8 +142,8 @@ def get_autoscaling_params(cf_app):
         'max_instances': int(app_conf.get('X_AUTOSCALING_MAX', DEFAULT_MAXIMUM_INSTANCES)),
         'instances': int(cf_app['entity']['instances']),
         'threshold_period': DEFAULT_THRESHOLD_PERIOD_MINUTES,
-        'high_threshold': DEFAULT_HIGH_THRESHOLD_CPU_PERCENTAGE,
-        'low_threshold': DEFAULT_LOW_THRESHOLD_CPU_PERCENTAGE,
+        'high_threshold': int(app_conf.get('X_AUTOSCALING_CPU_HIGH_THRESHOLD', DEFAULT_HIGH_THRESHOLD_CPU_PERCENTAGE)),
+        'low_threshold': int(app_conf.get('X_AUTOSCALING_CPU_LOW_THRESHOLD', DEFAULT_LOW_THRESHOLD_CPU_PERCENTAGE)),
         'scale_up_delay': DEFAULT_SCALE_UP_DELAY_MINUTES,
         'scale_down_delay': DEFAULT_SCALE_DOWN_DELAY_MINUTES,
     }

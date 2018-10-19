@@ -42,6 +42,20 @@ def test_get_autoscaling_params_autoscaling_min_max(app_factory, test_input, exp
     assert params['max_instances'] == expected['max']
 
 
+@pytest.mark.parametrize("test_input,expected", [
+    ({'X_AUTOSCALING_CPU_LOW_THRESHOLD': 25, 'X_AUTOSCALING_CPU_HIGH_THRESHOLD': 300},
+     {'low': 25, 'high': 300}),
+    ({}, {'low': main.DEFAULT_LOW_THRESHOLD_CPU_PERCENTAGE,
+          'high': main.DEFAULT_HIGH_THRESHOLD_CPU_PERCENTAGE}),
+])
+def test_get_autoscaling_params_autoscaling_cpu_threshold(app_factory, test_input, expected):
+    app = app_factory('my_app', **test_input)
+    params = get_autoscaling_params(app)
+
+    assert params['low_threshold'] == expected['low']
+    assert params['high_threshold'] == expected['high']
+
+
 def test_test_get_autoscaling_params(app_factory):
     app = app_factory('my_app')
     params = get_autoscaling_params(app)

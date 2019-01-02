@@ -42,6 +42,7 @@ DATABASE_URL = os.getenv('DATABASE_URL')
 CF_USERNAME = os.getenv('CF_USERNAME')
 CF_PASSWORD = os.getenv('CF_PASSWORD')
 SLACK_URL = os.getenv('SLACK_URL')
+SLACK_BOT_NAME = os.getenv('SLACK_BOT_NAME', 'autoscalingbot')
 DEFAULT_HIGH_THRESHOLD_CPU_PERCENTAGE = int(os.getenv('DEFAULT_HIGH_THRESHOLD_CPU_PERCENTAGE', 50))
 DEFAULT_LOW_THRESHOLD_CPU_PERCENTAGE = int(os.getenv('DEFAULT_LOW_THRESHOLD_CPU_PERCENTAGE', 10))
 DEFAULT_THRESHOLD_PERIOD_MINUTES = int(os.getenv('DEFAULT_THRESHOLD_PERIOD_MINUTES', 1))
@@ -164,7 +165,7 @@ async def slack_notify(app_name, message):
     slack_message = json.dumps(
         {
             'text': f'[{time}] *{app_name}*: `{message}`',
-            'username': 'autoscalingbot',
+            'username': SLACK_BOT_NAME,
             'mrkdwn': True
         }
     ).encode()

@@ -307,14 +307,16 @@ async def autoscale(conn):
             not await is_cooldown(app_name, space_name, params['scale_down_delay'], conn)):
 
             desired_instance_count = params['instances'] - 1
-            notification = f'scaled down to {desired_instance_count} - avg cpu {average_cpu}'
+            extra_text = ' [min]' if desired_instance_count == params['min_instances'] else ''
+            notification = f'scaled down to {desired_instance_count} - avg cpu {average_cpu}{extra_text}'
 
         elif (average_cpu > params['high_threshold'] and
             params['instances'] < params['max_instances'] and
             not await is_cooldown(app_name, space_name, params['scale_up_delay'], conn)):
 
             desired_instance_count = params['instances'] + 1
-            notification = f'scaled up to {desired_instance_count} - avg cpu {average_cpu}'
+            extra_text = ' [max]' if desired_instance_count == params['max_instances'] else ''
+            notification = f'scaled up to {desired_instance_count} - avg cpu {average_cpu}{extra_text}'
 
         if notification:
             await notify(app_name, notification)

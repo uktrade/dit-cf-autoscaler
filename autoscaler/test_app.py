@@ -302,6 +302,31 @@ async def test_autoscale_scale_up(mocker, app_factory, conn, create_metric):
 
 
 @pytest.mark.asyncio
+async def test_autoscale_scale_up_indicates_it_is_at_max(mocker, app_factory, conn, create_metric):
+
+    await reset_database(conn)
+
+    apps = [
+        app_factory('test_app', 'test_space', instances=9, X_AUTOSCALING='on', X_AUTOSCALING_MAX=10),
+    ]
+
+    # pass is_new_app test - this ensures that we don't attempt to autoscale transitory apps created
+    # as part of blue/green depoloyment process.
+    await create_metric(dt.datetime.now() - dt.timedelta(minutes=31), 'test_app', 'test_space', 2, 95)
+
+    for i in range(35):
+        await create_metric(dt.datetime.now() - dt.timedelta(seconds=30), 'test_app', 'test_space', 2, 95)
+
+    mock_get_client = mocker.patch('autoscaler.app.get_client')
+    mock_get_client.return_value.apps.list.return_value = apps
+    with async_patch('autoscaler.app.notify') as mock_notify:
+        await autoscale(conn)
+
+    assert mock_notify.called
+    assert mock_notify.call_args[0] == ('test_app', 'scaled up to 10 - avg cpu 95.0 [max]')
+
+
+@pytest.mark.asyncio
 async def test_autoscale_scale_down(mocker, app_factory, conn, create_metric):
 
     await reset_database(conn)
@@ -328,6 +353,29 @@ async def test_autoscale_scale_down(mocker, app_factory, conn, create_metric):
 
     assert mock_notify.called
     assert mock_notify.call_args[0] == ('test_app', 'scaled down to 4 - avg cpu 5.0')
+
+
+@pytest.mark.asyncio
+async def test_autoscale_scale_down_to_min_indicates_it_is_now_at_min(mocker, app_factory, conn, create_metric):
+
+    await reset_database(conn)
+
+    apps = [
+        app_factory('test_app', 'test_space', instances=3, X_AUTOSCALING='on', X_AUTOSCALING_MIN=2),
+    ]
+
+    await create_metric(dt.datetime.now() - dt.timedelta(minutes=30), 'test_app', 'test_space', 5, 5)
+
+    for i in range(10):
+        await create_metric(dt.datetime.now() - dt.timedelta(seconds=30), 'test_app', 'test_space', 5, 5)
+
+    mock_get_client = mocker.patch('autoscaler.app.get_client')
+    mock_get_client.return_value.apps.list.return_value = apps
+    with async_patch('autoscaler.app.notify') as mock_notify:
+        await autoscale(conn)
+
+    assert mock_notify.called
+    assert mock_notify.call_args[0] == ('test_app', 'scaled down to 2 - avg cpu 5.0 [min]')
 
 
 @pytest.mark.asyncio

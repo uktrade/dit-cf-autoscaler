@@ -6,7 +6,6 @@ import os
 import logging
 from logging.config import dictConfig
 import json
-import datetime as dt
 
 import asyncio
 import aiohttp
@@ -161,11 +160,9 @@ async def notify(app_name, message):
 
 async def slack_notify(app_name, message):
 
-    time = dt.datetime.now().strftime('%H:%M:%S')
-
     slack_message = json.dumps(
         {
-            'text': f'[{time}] *{app_name}*: `{message}`',
+            'text': f'*{app_name}*: `{message}`',
             'username': SLACK_BOT_NAME,
             'mrkdwn': True
         }

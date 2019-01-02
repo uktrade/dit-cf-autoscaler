@@ -41,6 +41,7 @@ APP_CHECK_INTERVAL_SECONDS = int(os.getenv('APP_CHECK_INTERVAL_SECONDS', 30))
 DATABASE_URL = os.getenv('DATABASE_URL')
 CF_USERNAME = os.getenv('CF_USERNAME')
 CF_PASSWORD = os.getenv('CF_PASSWORD')
+CF_ENDPOINT = os.getenv('CF_ENDPOINT')
 SLACK_URL = os.getenv('SLACK_URL')
 SLACK_BOT_NAME = os.getenv('SLACK_BOT_NAME', 'autoscalingbot')
 DEFAULT_HIGH_THRESHOLD_CPU_PERCENTAGE = int(os.getenv('DEFAULT_HIGH_THRESHOLD_CPU_PERCENTAGE', 50))
@@ -271,7 +272,7 @@ async def get_metrics(prometheus_exporter_url, username, password, conn):
 async def autoscale(conn):
     """The main autoscaling function"""
     loop = asyncio.get_event_loop()
-    client = await loop.run_in_executor(None, get_client, CF_USERNAME, CF_PASSWORD)
+    client = await loop.run_in_executor(None, get_client, CF_USERNAME, CF_PASSWORD, CF_ENDPOINT)
     enabled_apps = await loop.run_in_executor(None, get_enabled_apps, client)
 
     insufficient_data_count = 0

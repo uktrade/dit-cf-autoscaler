@@ -242,11 +242,13 @@ async def is_new_app(app_name, space_name, conn):
 async def get_metrics(prometheus_exporter_url, username, password, conn):
     """Get app metrics from the prometheus exporter and store in database"""
 
+    auth = aiohttp.BasicAuth(username, password) if username else None
+
     async def fetch(session, url):
         async with session.get(url) as response:
             return await response.text()
 
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(auth=auth) as session:
         raw_metrics = await fetch(session, prometheus_exporter_url)
 
     stmt = 'INSERT INTO metrics (timestamp, space, app, instance_count, average_cpu) ' \

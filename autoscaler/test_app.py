@@ -398,7 +398,7 @@ async def test_autoscale_scales_up_if_below_min(mocker, app_factory, create_metr
         await autoscale(conn)
 
     assert mock_notify.called
-    assert mock_notify.call_args[0] == ('test_app', 'scaled up as instance count is below minimum')
+    assert mock_notify.call_args[0] == ('test_app', 'scaled up to 2 as instance count below minimum')
 
 
 @pytest.mark.asyncio
@@ -421,7 +421,7 @@ async def test_autoscale_scales_down_if_above_max(mocker, app_factory, create_me
         await autoscale(conn)
 
     assert mock_notify.called
-    assert mock_notify.call_args[0] == ('test_app', 'scaled down as instance count is above maximum')
+    assert mock_notify.call_args[0] == ('test_app', 'scaled down to 10 as instance count above maximum')
 
 
 @pytest.mark.asyncio

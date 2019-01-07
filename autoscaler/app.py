@@ -295,13 +295,11 @@ async def autoscale(conn):
             continue
 
         if params['instances'] > params['max_instances']:
-            notification = 'scaled down as instance count is above maximum'
             desired_instance_count = params['instances'] - 1
-
+            notification = f'scaled down to {desired_instance_count} as instance count above maximum'
         elif params['instances'] < params['min_instances']:
-            notification = 'scaled up as instance count is below minimum'
             desired_instance_count = params['instances'] + 1
-
+            notification = f'scaled up to {desired_instance_count} as instance count below minimum'
         elif (average_cpu < params['low_threshold'] and
             params['instances'] > params['min_instances'] and
             not await is_cooldown(app_name, space_name, params['scale_down_delay'], conn)):

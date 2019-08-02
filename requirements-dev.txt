@@ -27,7 +27,7 @@ oauth2-client==0.0.21
 pluggy==0.6.0             # via pytest
 prometheus-client==0.2.0
 prometheus-metrics-proto==18.1.1
-protobuf==3.6.0           # via cloudfoundry-client, prometheus-metrics-proto
+protobuf==2.6.1
 psycopg2-binary==2.7.4
 psycopg2==2.7.4
 py==1.5.3                 # via pytest
@@ -44,7 +44,7 @@ python-dotenv==0.8.2
 quantile-python==1.1
 raven-aiohttp==0.7.0
 raven==6.9.0
-requests==2.18.4
+requests==2.20.0
 six==1.11.0               # via more-itertools, pytest
 urllib3==1.22
 werkzeug==0.14.1          # via pytest-localserver

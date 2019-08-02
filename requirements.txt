@@ -20,13 +20,13 @@ multidict==4.3.1          # via aiohttp, yarl
 oauth2-client==0.0.21     # via cloudfoundry-client
 prometheus-client==0.2.0
 prometheus-metrics-proto==18.1.1  # via aioprometheus
-protobuf==3.6.0           # via cloudfoundry-client, prometheus-metrics-proto
+protobuf==2.6.1           # via cloudfoundry-client, prometheus-metrics-proto
 psycopg2-binary==2.7.4
 psycopg2==2.7.4
 python-dotenv==0.8.2
 quantile-python==1.1      # via aioprometheus
 raven-aiohttp==0.7.0
 raven==6.9.0
-requests==2.18.4          # via oauth2-client
+requests==2.20.0          # via oauth2-client
 urllib3==1.22             # via requests
 yarl==1.2.4               # via aiohttp

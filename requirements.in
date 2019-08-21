@@ -5,7 +5,8 @@ psycopg2-binary
 aiohttp
 raven-aiohttp
 raven
-aiopg
+aiopg==0.16.0
 python-dotenv
 cloudfoundry-client
 -e git+http://github.com/amitsaha/aiohttp-prometheus.git#egg=aiohttp_prometheus
+urllib3>=1.24.2

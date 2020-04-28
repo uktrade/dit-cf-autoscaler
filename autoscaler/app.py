@@ -288,7 +288,7 @@ async def autoscale(conn):
 
             desired_instance_count = params['instances'] - 1
             extra_text = ' [min]' if desired_instance_count == params['min_instances'] else ''
-            notification = f'scaled down to {desired_instance_count} - avg cpu {average_cpu}{extra_text}'
+            notification = f'scaled down to {desired_instance_count} - avg cpu {average_cpu:.2f}{extra_text}'
 
         elif (average_cpu > params['high_threshold'] and
             params['instances'] < params['max_instances'] and
@@ -296,7 +296,7 @@ async def autoscale(conn):
 
             desired_instance_count = params['instances'] + 1
             extra_text = ' [max]' if desired_instance_count == params['max_instances'] else ''
-            notification = f'scaled up to {desired_instance_count} - avg cpu {average_cpu}{extra_text}'
+            notification = f'scaled up to {desired_instance_count} - avg cpu {average_cpu:.2f}{extra_text}'
 
         if notification:
             await notify(app_name, notification)

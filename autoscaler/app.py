@@ -222,21 +222,6 @@ async def get_avg_cpu(app_name, space_name, period, conn):
         raise InsufficientData
 
 
-async def is_new_app(app_name, space_name, conn):
-    """Only attempt to scale apps that have existed for a few minutes at least.
-    This stops the autoscaler from interfering with blue/green deployments"""
-
-    stmt = "SELECT count(*) FROM metrics " \
-           "WHERE app=%s AND space=%s AND " \
-           "timestamp < NOW() - INTERVAL '10 MINUTE'" \
-           "GROUP BY app;"
-
-    async with conn.cursor() as cur:
-        await cur.execute(stmt, (app_name, space_name,))
-
-        return cur.rowcount == 0
-
-
 @timer(PROM_GET_METRICS_TIME)
 async def get_metrics(prometheus_exporter_url, username, password, conn):
     """Get app metrics from the prometheus exporter and store in database"""
@@ -282,10 +267,7 @@ async def autoscale(conn):
         notification = None
         desired_instance_count = params['instances']
 
-        # to avoid issues with blue/green deployments we only want to manage apps
-        # that have several minutes of data, indicating that it's not a transitory
-        # app created as part of the deployment process
-        if await is_new_app(app_name, space_name, conn):
+        if app['entity']['state'] != 'STARTED':
             continue
 
         try:

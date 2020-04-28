@@ -30,12 +30,13 @@ class MockCfApp:
 
 @pytest.fixture
 def app_factory():
-    def _make_app(app_name='test_app', space_name='test_space', instances=1, **env_vars):
+    def _make_app(app_name='test_app', space_name='test_space', state='STARTED', instances=1, **env_vars):
 
         app_data = {
             'entity': {
                 'name': app_name,
                 'instances': instances,
+                'state': state,
                 'environment_json': {
                 }
             },

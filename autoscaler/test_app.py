@@ -4,7 +4,7 @@ import pytest
 from asynctest import patch as async_patch
 
 from autoscaler.app import get_autoscaling_params, is_cooldown, get_cpu_metrics, get_metrics, \
-    start_webapp, scale, InsufficientData, get_avg_cpu, get_enabled_apps, autoscale, is_new_app
+    start_webapp, scale, InsufficientData, get_avg_cpu, get_enabled_apps, autoscale
 
 from autoscaler import app as main
 
@@ -422,23 +422,3 @@ async def test_autoscale_scales_down_if_above_max(mocker, app_factory, create_me
 
     assert mock_notify.called
     assert mock_notify.call_args[0] == ('test_app', 'scaled down to 10 as instance count above maximum')
-
-
-@pytest.mark.asyncio
-async def test_is_new_app_true(conn):
-
-    await reset_database(conn)
-
-    assert await is_new_app('test_app', 'test_space', conn)
-
-
-@pytest.mark.asyncio
-async def test_is_new_app_false(create_metric, conn):
-    await reset_database(conn)
-
-    timestamp = dt.datetime.now() - dt.timedelta(15)
-
-    await create_metric(timestamp, 'test_app', 'test_space', 1, 1)
-
-    assert not await is_new_app('test_app', 'test_space', conn)
-

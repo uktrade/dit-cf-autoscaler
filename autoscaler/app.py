@@ -267,9 +267,6 @@ async def autoscale(conn):
         notification = None
         desired_instance_count = params['instances']
 
-        if app['entity']['state'] != 'STARTED':
-            continue
-
         try:
             average_cpu = await get_avg_cpu(app_name, space_name, params['threshold_period'], conn)
         except InsufficientData:
@@ -301,7 +298,7 @@ async def autoscale(conn):
         if notification:
             await notify(app_name, notification)
 
-        if desired_instance_count != params['instances']:
+        if desired_instance_count != params['instances'] and app['entity']['state'] == 'STARTED':
             await scale(app, space_name, desired_instance_count, conn)
             PROM_SCALING_ACTIONS.inc({})
 

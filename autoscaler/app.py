@@ -298,9 +298,12 @@ async def autoscale(conn):
         if notification:
             await notify(app_name, notification)
 
-        if desired_instance_count != params['instances'] and app['entity']['state'] == 'STARTED':
-            await scale(app, space_name, desired_instance_count, conn)
-            PROM_SCALING_ACTIONS.inc({})
+        if desired_instance_count != params['instances']:
+            summary = await loop.run_in_executor(None, app.summary)
+
+            if summary['state'] == 'STARTED':
+                await scale(app, space_name, desired_instance_count, conn)
+                PROM_SCALING_ACTIONS.inc({})
 
     PROM_INSUFFICIENT_DATA.set({}, insufficient_data_count)
     PROM_AUTOSCALING_ENABLED.set({}, len(enabled_apps))

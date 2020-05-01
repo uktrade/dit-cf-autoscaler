@@ -302,8 +302,11 @@ async def autoscale(conn):
             summary = await loop.run_in_executor(None, app.summary)
 
             if summary['state'] == 'STARTED':
-                await scale(app, space_name, desired_instance_count, conn)
-                PROM_SCALING_ACTIONS.inc({})
+                try:
+                    await scale(app, space_name, desired_instance_count, conn)
+                    PROM_SCALING_ACTIONS.inc({})
+                except:  # noqa
+                    logger.error(f'Failed to scale {space_name} / {app} to {desired_instance_count}')
 
     PROM_INSUFFICIENT_DATA.set({}, insufficient_data_count)
     PROM_AUTOSCALING_ENABLED.set({}, len(enabled_apps))

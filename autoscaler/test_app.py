@@ -4,7 +4,7 @@ import pytest
 from asynctest import patch as async_patch
 
 from autoscaler.app import get_autoscaling_params, is_cooldown, get_cpu_metrics, get_metrics, \
-    start_webapp, scale, InsufficientData, get_avg_cpu, get_enabled_apps, autoscale, is_new_app
+    start_webapp, scale, InsufficientData, get_avg_cpu, get_enabled_apps, autoscale
 
 from autoscaler import app as main
 
@@ -298,7 +298,7 @@ async def test_autoscale_scale_up(mocker, app_factory, conn, create_metric):
         assert await cur.fetchone() == ('test_app', 'test_space', 6)
 
     assert mock_notify.called
-    assert mock_notify.call_args[0] == ('test_app', 'scaled up to 6 - avg cpu 95.0')
+    assert mock_notify.call_args[0] == ('test_app', 'scaled up to 6 - avg cpu 95.00')
 
 
 @pytest.mark.asyncio
@@ -323,7 +323,7 @@ async def test_autoscale_scale_up_indicates_it_is_at_max(mocker, app_factory, co
         await autoscale(conn)
 
     assert mock_notify.called
-    assert mock_notify.call_args[0] == ('test_app', 'scaled up to 10 - avg cpu 95.0 [max]')
+    assert mock_notify.call_args[0] == ('test_app', 'scaled up to 10 - avg cpu 95.00 [max]')
 
 
 @pytest.mark.asyncio
@@ -352,7 +352,7 @@ async def test_autoscale_scale_down(mocker, app_factory, conn, create_metric):
         assert await cur.fetchone() == ('test_app', 'test_space', 4)
 
     assert mock_notify.called
-    assert mock_notify.call_args[0] == ('test_app', 'scaled down to 4 - avg cpu 5.0')
+    assert mock_notify.call_args[0] == ('test_app', 'scaled down to 4 - avg cpu 5.00')
 
 
 @pytest.mark.asyncio
@@ -375,7 +375,7 @@ async def test_autoscale_scale_down_to_min_indicates_it_is_now_at_min(mocker, ap
         await autoscale(conn)
 
     assert mock_notify.called
-    assert mock_notify.call_args[0] == ('test_app', 'scaled down to 2 - avg cpu 5.0 [min]')
+    assert mock_notify.call_args[0] == ('test_app', 'scaled down to 2 - avg cpu 5.00 [min]')
 
 
 @pytest.mark.asyncio
@@ -422,23 +422,3 @@ async def test_autoscale_scales_down_if_above_max(mocker, app_factory, create_me
 
     assert mock_notify.called
     assert mock_notify.call_args[0] == ('test_app', 'scaled down to 10 as instance count above maximum')
-
-
-@pytest.mark.asyncio
-async def test_is_new_app_true(conn):
-
-    await reset_database(conn)
-
-    assert await is_new_app('test_app', 'test_space', conn)
-
-
-@pytest.mark.asyncio
-async def test_is_new_app_false(create_metric, conn):
-    await reset_database(conn)
-
-    timestamp = dt.datetime.now() - dt.timedelta(15)
-
-    await create_metric(timestamp, 'test_app', 'test_space', 1, 1)
-
-    assert not await is_new_app('test_app', 'test_space', conn)
-

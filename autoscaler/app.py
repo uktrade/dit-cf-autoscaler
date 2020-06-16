@@ -222,21 +222,6 @@ async def get_avg_cpu(app_name, space_name, period, conn):
         raise InsufficientData
 
 
-async def is_new_app(app_name, space_name, conn):
-    """Only attempt to scale apps that have existed for a few minutes at least.
-    This stops the autoscaler from interfering with blue/green deployments"""
-
-    stmt = "SELECT count(*) FROM metrics " \
-           "WHERE app=%s AND space=%s AND " \
-           "timestamp < NOW() - INTERVAL '10 MINUTE'" \
-           "GROUP BY app;"
-
-    async with conn.cursor() as cur:
-        await cur.execute(stmt, (app_name, space_name,))
-
-        return cur.rowcount == 0
-
-
 @timer(PROM_GET_METRICS_TIME)
 async def get_metrics(prometheus_exporter_url, username, password, conn):
     """Get app metrics from the prometheus exporter and store in database"""
@@ -282,12 +267,6 @@ async def autoscale(conn):
         notification = None
         desired_instance_count = params['instances']
 
-        # to avoid issues with blue/green deployments we only want to manage apps
-        # that have several minutes of data, indicating that it's not a transitory
-        # app created as part of the deployment process
-        if await is_new_app(app_name, space_name, conn):
-            continue
-
         try:
             average_cpu = await get_avg_cpu(app_name, space_name, params['threshold_period'], conn)
         except InsufficientData:
@@ -306,7 +285,7 @@ async def autoscale(conn):
 
             desired_instance_count = params['instances'] - 1
             extra_text = ' [min]' if desired_instance_count == params['min_instances'] else ''
-            notification = f'scaled down to {desired_instance_count} - avg cpu {average_cpu}{extra_text}'
+            notification = f'scaled down to {desired_instance_count} - avg cpu {average_cpu:.2f}{extra_text}'
 
         elif (average_cpu > params['high_threshold'] and
             params['instances'] < params['max_instances'] and
@@ -314,14 +293,20 @@ async def autoscale(conn):
 
             desired_instance_count = params['instances'] + 1
             extra_text = ' [max]' if desired_instance_count == params['max_instances'] else ''
-            notification = f'scaled up to {desired_instance_count} - avg cpu {average_cpu}{extra_text}'
+            notification = f'scaled up to {desired_instance_count} - avg cpu {average_cpu:.2f}{extra_text}'
 
         if notification:
             await notify(app_name, notification)
 
         if desired_instance_count != params['instances']:
-            await scale(app, space_name, desired_instance_count, conn)
-            PROM_SCALING_ACTIONS.inc({})
+            summary = await loop.run_in_executor(None, app.summary)
+
+            if summary['state'] == 'STARTED':
+                try:
+                    await scale(app, space_name, desired_instance_count, conn)
+                    PROM_SCALING_ACTIONS.inc({})
+                except:  # noqa
+                    logger.error(f'Failed to scale {space_name} / {app} to {desired_instance_count}')
 
     PROM_INSUFFICIENT_DATA.set({}, insufficient_data_count)
     PROM_AUTOSCALING_ENABLED.set({}, len(enabled_apps))
